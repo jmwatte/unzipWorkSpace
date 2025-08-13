@@ -277,7 +277,7 @@ function Extract-Archive {
 				# Build arguments array for proper parsing
 				$arguments = @("-x")
 				if ($compressionFlag) { $arguments += $compressionFlag }
-				$arguments += @("-f", $FilePath, "-C", $extractPath, "-v")
+				$arguments += @("-f", "`"$FilePath`"", "-C", "`"$extractPath`"", "-v")
                 
 				$process = Start-Process -FilePath "tar" -ArgumentList $arguments -Wait -NoNewWindow -PassThru -RedirectStandardOutput $outputFile -RedirectStandardError $errorFile
                 
@@ -288,7 +288,18 @@ function Extract-Archive {
 				# Clean up temp files
 				Remove-Item $outputFile -ErrorAction SilentlyContinue
 				Remove-Item $errorFile -ErrorAction SilentlyContinue
-                
+				# Check for tar failure (exit code 1)
+				if ($process.ExitCode -eq 1) {
+					Write-Host "✗ Tar extraction failed with exit code: $($process.ExitCode)" -ForegroundColor Red
+					if ($errorOutput) {
+						Write-Host "Tar Error Output:" -ForegroundColor Red
+						Write-Host $errorOutput -ForegroundColor DarkRed
+					}
+					return @{
+						Success        = $false
+						ExtractedFiles = @()
+					}
+				}
 				if ($process.ExitCode -eq 0) {
 					Write-Host "✓ Successfully extracted with native tar" -ForegroundColor Green
                     
@@ -505,287 +516,298 @@ function Extract-Archive {
 	}
 
 	catch {
-			Write-Host "✗ Error extracting $FilePath : $($_.Exception.Message)" -ForegroundColor Red
-			return @{
-					Success        = $false
-					ExtractedFiles = @()
-				}
-			}
-			# catch {
-			# 	Write-Host "✗ Error extracting $FilePath : $($_.Exception.Message)" -ForegroundColor Red
-			# 	return @{
-			# 		Success        = $false
-			# 		ExtractedFiles = @()
-			# 	}
-			# }
+		Write-Host "✗ Error extracting $FilePath : $($_.Exception.Message)" -ForegroundColor Red
+		return @{
+			Success        = $false
+			ExtractedFiles = @()
+		}
+	}
+	# catch {
+	# 	Write-Host "✗ Error extracting $FilePath : $($_.Exception.Message)" -ForegroundColor Red
+	# 	return @{
+	# 		Success        = $false
+	# 		ExtractedFiles = @()
+	# 	}
+	# }
 
-			# Find extracted files - use method appropriate for extraction type
-			# if (-not $extractedFiles -or $extractedFiles.Count -eq 0) {
-			# 	# Fallback to timestamp-based detection if no files list was captured
-			# 	Write-Host "DEBUG: Using timestamp-based file detection as fallback" -ForegroundColor Gray
-			# 	if (Test-Path $extractPath) {
-			# 		$extractedFiles = Get-ChildItem $extractPath | 
-			# 		Where-Object { $_.CreationTime -gt $extractionStartTime } | 
-			# 		ForEach-Object { $_.FullName }
-			# 	}
-			# }
-			# else {
-			# 	Write-Host "DEBUG: Using extracted files list from extraction tool ($($extractedFiles.Count) files)" -ForegroundColor Gray
-			# }
+	# Find extracted files - use method appropriate for extraction type
+	# if (-not $extractedFiles -or $extractedFiles.Count -eq 0) {
+	# 	# Fallback to timestamp-based detection if no files list was captured
+	# 	Write-Host "DEBUG: Using timestamp-based file detection as fallback" -ForegroundColor Gray
+	# 	if (Test-Path $extractPath) {
+	# 		$extractedFiles = Get-ChildItem $extractPath | 
+	# 		Where-Object { $_.CreationTime -gt $extractionStartTime } | 
+	# 		ForEach-Object { $_.FullName }
+	# 	}
+	# }
+	# else {
+	# 	Write-Host "DEBUG: Using extracted files list from extraction tool ($($extractedFiles.Count) files)" -ForegroundColor Gray
+	# }
         
-			return @{
-				Success        = $true
-				ExtractedFiles = $extractedFiles
-			}
+	return @{
+		Success        = $true
+		ExtractedFiles = $extractedFiles
+	}
 	
+}
+function Get-CompressedFiles {
+	param(
+		[string]$Path,
+		[bool]$Recursive
+	)
+    
+	if (Test-Path $Path -PathType Leaf) {
+		# Single file
+		$extension = [System.IO.Path]::GetExtension($Path).ToLower()
+		if ($extension -in $SupportedExtensions -or $Path -match '\.(tar\.(gz|bz2|xz))$') {
+			return @(@{
+					FullName     = $Path
+					RelativePath = ""
+				})
 		}
-		function Get-CompressedFiles {
-			param(
-				[string]$Path,
-				[bool]$Recursive
+		else {
+			Write-Host "✗ File $Path is not a supported compressed format" -ForegroundColor Red
+			return @()
+		}
+	}
+	elseif (Test-Path $Path -PathType Container) {
+		# Directory
+		$searchOption = if ($Recursive) { "AllDirectories" } else { "TopDirectoryOnly" }
+        
+		$files = Get-ChildItem -Path $Path -Recurse:$Recursive | Where-Object {
+			-not $_.PSIsContainer -and (
+				$_.Extension.ToLower() -in $SupportedExtensions -or
+				$_.Name -match '\.(tar\.(gz|bz2|xz))$'
 			)
-    
-			if (Test-Path $Path -PathType Leaf) {
-				# Single file
-				$extension = [System.IO.Path]::GetExtension($Path).ToLower()
-				if ($extension -in $SupportedExtensions -or $Path -match '\.(tar\.(gz|bz2|xz))$') {
-					return @(@{
-							FullName     = $Path
-							RelativePath = ""
-						})
-				}
-				else {
-					Write-Host "✗ File $Path is not a supported compressed format" -ForegroundColor Red
-					return @()
-				}
-			}
-			elseif (Test-Path $Path -PathType Container) {
-				# Directory
-				$searchOption = if ($Recursive) { "AllDirectories" } else { "TopDirectoryOnly" }
+		}
         
-				$files = Get-ChildItem -Path $Path -Recurse:$Recursive | Where-Object {
-					-not $_.PSIsContainer -and (
-						$_.Extension.ToLower() -in $SupportedExtensions -or
-						$_.Name -match '\.(tar\.(gz|bz2|xz))$'
-					)
-				}
-        
-				return $files | ForEach-Object {
-					$relativePath = $_.DirectoryName.Substring($Path.Length).TrimStart('\', '/')
-					@{
-						FullName     = $_.FullName
-						RelativePath = $relativePath
-					}
-				}
-			}
-			else {
-				Write-Host "✗ Path $Path does not exist" -ForegroundColor Red
-				return @()
+		return $files | ForEach-Object {
+			$relativePath = $_.DirectoryName.Substring($Path.Length).TrimStart('\', '/')
+			@{
+				FullName     = $_.FullName
+				RelativePath = $relativePath
 			}
 		}
+	}
+	else {
+		Write-Host "✗ Path $Path does not exist" -ForegroundColor Red
+		return @()
+	}
+}
 
-		# Main execution
-		function Main {
-			Write-Host "Universal Compressed File Extractor" -ForegroundColor Cyan
-			Write-Host "=====================================" -ForegroundColor Cyan
+# Main execution
+function Main {
+	Write-Host "Universal Compressed File Extractor" -ForegroundColor Cyan
+	Write-Host "=====================================" -ForegroundColor Cyan
     
+	if ($WhatIf) {
+		Write-Host "*** WHAT-IF MODE: No files will be actually extracted ***" -ForegroundColor Magenta
+		Write-Host ""
+	}
+    
+	# Get parameters if not provided
+	if (-not $SourcePath) {
+		$SourcePath = Read-Host "Enter the path to compressed file or folder"
+	}
+    
+	# Validate source path
+	if (-not (Test-Path $SourcePath)) {
+		Write-Host "✗ Source path does not exist: $SourcePath" -ForegroundColor Red
+		return
+	}
+    
+	# Set default destination path if not provided
+	if (-not $DestinationPath) {
+		if (Test-Path $SourcePath -PathType Leaf) {
+			# If source is a file, use the directory containing the file
+			$DestinationPath = Split-Path $SourcePath -Parent
+			Write-Host "No destination specified. Using source file directory: $DestinationPath" -ForegroundColor Yellow
+		}
+		else {
+			# If source is a directory, use the directory itself
+			$DestinationPath = $SourcePath
+			Write-Host "No destination specified. Using source directory: $DestinationPath" -ForegroundColor Yellow
+		}
+	}
+	else {
+		# User provided a destination, check if it needs to be created
+		if (-not (Test-Path $DestinationPath)) {
 			if ($WhatIf) {
-				Write-Host "*** WHAT-IF MODE: No files will be actually extracted ***" -ForegroundColor Magenta
-				Write-Host ""
-			}
-    
-			# Get parameters if not provided
-			if (-not $SourcePath) {
-				$SourcePath = Read-Host "Enter the path to compressed file or folder"
-			}
-    
-			# Validate source path
-			if (-not (Test-Path $SourcePath)) {
-				Write-Host "✗ Source path does not exist: $SourcePath" -ForegroundColor Red
-				return
-			}
-    
-			# Set default destination path if not provided
-			if (-not $DestinationPath) {
-				if (Test-Path $SourcePath -PathType Leaf) {
-					# If source is a file, use the directory containing the file
-					$DestinationPath = Split-Path $SourcePath -Parent
-					Write-Host "No destination specified. Using source file directory: $DestinationPath" -ForegroundColor Yellow
-				}
-				else {
-					# If source is a directory, use the directory itself
-					$DestinationPath = $SourcePath
-					Write-Host "No destination specified. Using source directory: $DestinationPath" -ForegroundColor Yellow
-				}
+				Write-Host "WHAT IF: Would create destination folder: $DestinationPath" -ForegroundColor Magenta
 			}
 			else {
-				# User provided a destination, check if it needs to be created
-				if (-not (Test-Path $DestinationPath)) {
-					if ($WhatIf) {
-						Write-Host "WHAT IF: Would create destination folder: $DestinationPath" -ForegroundColor Magenta
-					}
-					else {
-						Write-Host "Creating destination folder: $DestinationPath" -ForegroundColor Yellow
-						New-Item -Path $DestinationPath -ItemType Directory -Force | Out-Null
-					}
-				}
+				Write-Host "Creating destination folder: $DestinationPath" -ForegroundColor Yellow
+				New-Item -Path $DestinationPath -ItemType Directory -Force | Out-Null
 			}
+		}
+	}
     
-			# Get all compressed files
-			$compressedFiles = Get-CompressedFiles -Path $SourcePath -Recursive:$Recursive
+	# Get all compressed files
+	$compressedFiles = Get-CompressedFiles -Path $SourcePath -Recursive:$Recursive
     
-			if ($compressedFiles.Count -eq 0) {
-				Write-Host "✗ No supported compressed files found in: $SourcePath" -ForegroundColor Red
-				Write-Host "Supported formats: $($SupportedExtensions -join ', ')" -ForegroundColor Yellow
-				return
+	if ($compressedFiles.Count -eq 0) {
+		Write-Host "✗ No supported compressed files found in: $SourcePath" -ForegroundColor Red
+		Write-Host "Supported formats: $($SupportedExtensions -join ', ')" -ForegroundColor Yellow
+		return
+	}
+    
+	$actionWord = if ($WhatIf) { "Extracting" } else { "Extracting" }
+	Write-Host "`n$actionWord compressed files...`n" -ForegroundColor Green
+    
+	$successCount = 0
+	$failCount = 0
+	$successFiles = @()
+	$failedFiles = @()
+	$allExtractedFiles = @()
+    
+	foreach ($file in $compressedFiles) {
+		$result = Extract-Archive -FilePath $file.FullName -DestinationPath $DestinationPath -RelativePath $file.RelativePath -WhatIf:$WhatIf
+		if ($result.Success) {
+			$successCount++
+			$successFiles += $file.FullName
+			$allExtractedFiles += $result.ExtractedFiles
+		}
+		else {
+			$failCount++
+			$failedFiles += $file.FullName
+		}
+		Write-Host ""
+	}
+    
+	# Summary
+	$summaryWord = if ($WhatIf) { "What-If Summary:" } else { "Extraction Summary:" }
+	Write-Host $summaryWord -ForegroundColor Cyan
+	Write-Host "=================" -ForegroundColor Cyan
+    
+	if ($WhatIf) {
+		Write-Host "✓ Would successfully extract: $successCount file(s)" -ForegroundColor Green
+		if ($successFiles.Count -gt 0) {
+			foreach ($file in $successFiles) {
+				Write-Host "  • $file" -ForegroundColor Gray
 			}
-    
-			$actionWord = if ($WhatIf) { "Extracting" } else { "Extracting" }
-			Write-Host "`n$actionWord compressed files...`n" -ForegroundColor Green
-    
-			$successCount = 0
-			$failCount = 0
-			$successFiles = @()
-			$failedFiles = @()
-			$allExtractedFiles = @()
-    
-			foreach ($file in $compressedFiles) {
-				$result = Extract-Archive -FilePath $file.FullName -DestinationPath $DestinationPath -RelativePath $file.RelativePath -WhatIf:$WhatIf
-				if ($result.Success) {
-					$successCount++
-					$successFiles += $file.FullName
-					$allExtractedFiles += $result.ExtractedFiles
-				}
-				else {
-					$failCount++
-					$failedFiles += $file.FullName
-				}
-				Write-Host ""
+		}
+		if ($failCount -gt 0) {
+			Write-Host "✗ Would fail to extract: $failCount file(s)" -ForegroundColor Red
+			foreach ($file in $failedFiles) {
+				Write-Host "  • $file" -ForegroundColor Gray
 			}
-    
-			# Summary
-			$summaryWord = if ($WhatIf) { "What-If Summary:" } else { "Extraction Summary:" }
-			Write-Host $summaryWord -ForegroundColor Cyan
-			Write-Host "=================" -ForegroundColor Cyan
-    
-			if ($WhatIf) {
-				Write-Host "✓ Would successfully extract: $successCount file(s)" -ForegroundColor Green
-				if ($successFiles.Count -gt 0) {
-					foreach ($file in $successFiles) {
-						Write-Host "  • $file" -ForegroundColor Gray
-					}
-				}
-				if ($failCount -gt 0) {
-					Write-Host "✗ Would fail to extract: $failCount file(s)" -ForegroundColor Red
-					foreach ($file in $failedFiles) {
-						Write-Host "  • $file" -ForegroundColor Gray
-					}
-				}
-				Write-Host "Would extract to: $DestinationPath" -ForegroundColor Gray
-			}
-			else {
-				Write-Host "✓ Successfully extracted to: "$($result.ExtractedFiles[0])"" -ForegroundColor Green
-			}
-			# 	if ($successFiles.Count -gt 0) {
-			# 		foreach ($file in $successFiles) {
-			# 			Write-Host "  • $file" -ForegroundColor Gray
-			# 		}
-			# 	}
-			# 	if ($failCount -gt 0) {
-			# 		Write-Host "✗ Failed to extract: $failCount file(s)" -ForegroundColor Red
-			# 		foreach ($file in $failedFiles) {
-			# 			Write-Host "  • $file" -ForegroundColor Gray
-			# 		}
-			# 	}
+		}
+		Write-Host "Would extract to: $DestinationPath" -ForegroundColor Gray
+	}
+	else {
+		
+    if ($result.Success) {
+
+        Write-Host "✓ Successfully extracted: $(Split-Path $file.FullName -Leaf) to $($result.ExtractedFiles[0])" -ForegroundColor Green
+    }
+    else {
         
-			# 	# Show what files were actually created
-			# 	if ($allExtractedFiles.Count -gt 0) {
-			# 		Write-Host "`nFiles created:" -ForegroundColor Yellow
-			# 		Write-Host "DEBUG: About to analyze extracted files..." -ForegroundColor Gray
+        Write-Host "✗ Extraction failed: $(Split-Path $file.FullName -Leaf)" -ForegroundColor Red
+    }
+    Write-Host ""
+}
+	
+	}
+	# 	if ($successFiles.Count -gt 0) {
+	# 		foreach ($file in $successFiles) {
+	# 			Write-Host "  • $file" -ForegroundColor Gray
+	# 		}
+	# 	}
+	# 	if ($failCount -gt 0) {
+	# 		Write-Host "✗ Failed to extract: $failCount file(s)" -ForegroundColor Red
+	# 		foreach ($file in $failedFiles) {
+	# 			Write-Host "  • $file" -ForegroundColor Gray
+	# 		}
+	# 	}
+        
+	# 	# Show what files were actually created
+	# 	if ($allExtractedFiles.Count -gt 0) {
+	# 		Write-Host "`nFiles created:" -ForegroundColor Yellow
+	# 		Write-Host "DEBUG: About to analyze extracted files..." -ForegroundColor Gray
             
-			# 		# Analyze what was extracted - separate folders from files
-			# 		$topLevelFolders = @()
-			# 		$compressedFileCount = 0
-			# 		$foldersWithCompressedFiles = @()
+	# 		# Analyze what was extracted - separate folders from files
+	# 		$topLevelFolders = @()
+	# 		$compressedFileCount = 0
+	# 		$foldersWithCompressedFiles = @()
             
-			# 		Write-Host "DEBUG: Analyzing extracted items..." -ForegroundColor Gray
-			# 		foreach ($extractedItem in $allExtractedFiles) {
-			# 			if (Test-Path $extractedItem -PathType Container) {
-			# 				# It's a folder - get its name and check for compressed files inside
-			# 				$folderName = Split-Path $extractedItem -Leaf
-			# 				$topLevelFolders += $folderName
+	# 		Write-Host "DEBUG: Analyzing extracted items..." -ForegroundColor Gray
+	# 		foreach ($extractedItem in $allExtractedFiles) {
+	# 			if (Test-Path $extractedItem -PathType Container) {
+	# 				# It's a folder - get its name and check for compressed files inside
+	# 				$folderName = Split-Path $extractedItem -Leaf
+	# 				$topLevelFolders += $folderName
                     
-			# 				Write-Host "DEBUG: Checking folder '$folderName' for compressed files..." -ForegroundColor Gray
-			# 				try {
-			# 					$hasCompressedFiles = Get-ChildItem -Path $extractedItem -Recurse -File -ErrorAction SilentlyContinue | 
-			# 					Where-Object {
-			# 						$ext = $_.Extension.ToLower()
-			# 						$ext -in $SupportedExtensions -or $_.Name -match '\.(tar\.(gz|bz2|xz))$'
-			# 					} | Select-Object -First 1
+	# 				Write-Host "DEBUG: Checking folder '$folderName' for compressed files..." -ForegroundColor Gray
+	# 				try {
+	# 					$hasCompressedFiles = Get-ChildItem -Path $extractedItem -Recurse -File -ErrorAction SilentlyContinue | 
+	# 					Where-Object {
+	# 						$ext = $_.Extension.ToLower()
+	# 						$ext -in $SupportedExtensions -or $_.Name -match '\.(tar\.(gz|bz2|xz))$'
+	# 					} | Select-Object -First 1
                         
-			# 					if ($hasCompressedFiles) {
-			# 						$foldersWithCompressedFiles += $folderName
-			# 						$compressedFileCount = 1  # Just indicate we found some
-			# 						Write-Host "DEBUG: Found compressed files in '$folderName'" -ForegroundColor Gray
-			# 					}
-			# 				}
-			# 				catch {
-			# 					Write-Verbose "Could not scan folder $extractedItem for compressed files"
-			# 				}
-			# 			}
-			# 			elseif (Test-Path $extractedItem -PathType Leaf) {
-			# 				# It's a file - check if it's compressed
-			# 				$fileExt = [System.IO.Path]::GetExtension($extractedItem).ToLower()
-			# 				if ($fileExt -in $SupportedExtensions -or $extractedItem -match '\.(tar\.(gz|bz2|xz))$') {
-			# 					$compressedFileCount = 1
-			# 					Write-Host "DEBUG: Found compressed file: $(Split-Path $extractedItem -Leaf)" -ForegroundColor Gray
-			# 				}
-			# 			}
-			# 		}
-			# 		Write-Host "DEBUG: Found $($topLevelFolders.Count) folders, $($foldersWithCompressedFiles.Count) with compressed files" -ForegroundColor Gray
+	# 					if ($hasCompressedFiles) {
+	# 						$foldersWithCompressedFiles += $folderName
+	# 						$compressedFileCount = 1  # Just indicate we found some
+	# 						Write-Host "DEBUG: Found compressed files in '$folderName'" -ForegroundColor Gray
+	# 					}
+	# 				}
+	# 				catch {
+	# 					Write-Verbose "Could not scan folder $extractedItem for compressed files"
+	# 				}
+	# 			}
+	# 			elseif (Test-Path $extractedItem -PathType Leaf) {
+	# 				# It's a file - check if it's compressed
+	# 				$fileExt = [System.IO.Path]::GetExtension($extractedItem).ToLower()
+	# 				if ($fileExt -in $SupportedExtensions -or $extractedItem -match '\.(tar\.(gz|bz2|xz))$') {
+	# 					$compressedFileCount = 1
+	# 					Write-Host "DEBUG: Found compressed file: $(Split-Path $extractedItem -Leaf)" -ForegroundColor Gray
+	# 				}
+	# 			}
+	# 		}
+	# 		Write-Host "DEBUG: Found $($topLevelFolders.Count) folders, $($foldersWithCompressedFiles.Count) with compressed files" -ForegroundColor Gray
             
-			# 		# Show summary of created files (first few)
-			# 		$maxFilesToShow = 5
-			# 		$filesShown = 0
-			# 		foreach ($extractedFile in $allExtractedFiles | Sort-Object) {
-			# 			if ($filesShown -lt $maxFilesToShow) {
-			# 				$relativePath = $extractedFile.Replace($DestinationPath, "").TrimStart('\', '/')
-			# 				Write-Host "  → $relativePath" -ForegroundColor Cyan
-			# 				$filesShown++
-			# 			}
-			# 			else {
-			# 				Write-Host "  → ... and $($allExtractedFiles.Count - $filesShown) more files" -ForegroundColor Cyan
-			# 				break
-			# 			}
-			# 		}
+	# 		# Show summary of created files (first few)
+	# 		$maxFilesToShow = 5
+	# 		$filesShown = 0
+	# 		foreach ($extractedFile in $allExtractedFiles | Sort-Object) {
+	# 			if ($filesShown -lt $maxFilesToShow) {
+	# 				$relativePath = $extractedFile.Replace($DestinationPath, "").TrimStart('\', '/')
+	# 				Write-Host "  → $relativePath" -ForegroundColor Cyan
+	# 				$filesShown++
+	# 			}
+	# 			else {
+	# 				Write-Host "  → ... and $($allExtractedFiles.Count - $filesShown) more files" -ForegroundColor Cyan
+	# 				break
+	# 			}
+	# 		}
             
-			# 		# Smart suggestion for compressed files
-			# 		if ($compressedFileCount -gt 0) {
-			# 			Write-Host "`n💡 Found $compressedFileCount compressed files that can be extracted!" -ForegroundColor Magenta
+	# 		# Smart suggestion for compressed files
+	# 		if ($compressedFileCount -gt 0) {
+	# 			Write-Host "`n💡 Found $compressedFileCount compressed files that can be extracted!" -ForegroundColor Magenta
                 
-			# 			if ($topLevelFolders.Count -gt 0) {
-			# 				foreach ($folder in $topLevelFolders) {
-			# 					$folderPath = Join-Path $DestinationPath $folder
-			# 					Write-Host "📁 To extract all compressed files in '$folder':" -ForegroundColor Yellow
-			# 					Write-Host "   .\unzipFile.ps1 -SourcePath `"$folderPath`" -Recursive" -ForegroundColor Cyan
-			# 				}
-			# 			}
-			# 			else {
-			# 				Write-Host "� To extract all compressed files:" -ForegroundColor Yellow
-			# 				Write-Host "   .\unzipFile.ps1 -SourcePath `"$DestinationPath`" -Recursive" -ForegroundColor Cyan
-			# 			}
-			# 		}
-			# 	}
+	# 			if ($topLevelFolders.Count -gt 0) {
+	# 				foreach ($folder in $topLevelFolders) {
+	# 					$folderPath = Join-Path $DestinationPath $folder
+	# 					Write-Host "📁 To extract all compressed files in '$folder':" -ForegroundColor Yellow
+	# 					Write-Host "   .\unzipFile.ps1 -SourcePath `"$folderPath`" -Recursive" -ForegroundColor Cyan
+	# 				}
+	# 			}
+	# 			else {
+	# 				Write-Host "� To extract all compressed files:" -ForegroundColor Yellow
+	# 				Write-Host "   .\unzipFile.ps1 -SourcePath `"$DestinationPath`" -Recursive" -ForegroundColor Cyan
+	# 			}
+	# 		}
+	# 	}
         
-			# 	Write-Host "`nDestination: $DestinationPath" -ForegroundColor Gray
-			# }
-		}
+	# 	Write-Host "`nDestination: $DestinationPath" -ForegroundColor Gray
+	# }
 
-		# Show help if requested
-		if ($args -contains "-help" -or $args -contains "--help" -or $args -contains "/?" -or $args -contains "-h") {
-			Show-Help
-			return
-		}
 
-		# Run main function
-		Main
+# Show help if requested
+if ($args -contains "-help" -or $args -contains "--help" -or $args -contains "/?" -or $args -contains "-h") {
+	Show-Help
+	return
+}
+
+# Run main function
+Main

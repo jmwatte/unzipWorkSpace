@@ -8,10 +8,9 @@
             "script": "${workspaceFolder}\\Scripts\\unzipFile.ps1",
             "args": [
                 "-SourcePath",
-                "I:\\mrbstof2014.tar.gz",
+                "I:\\maryGaulthierTroubleLove.tar.gz",
 				"-DestinationPath",
-				"I:"
-				
+				"H:\\"
             ],
             "cwd": "${workspaceFolder}",
             "createTemporaryIntegratedConsole": false
