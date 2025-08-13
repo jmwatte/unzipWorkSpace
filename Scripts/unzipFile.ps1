@@ -329,53 +329,54 @@ function Extract-Archive {
 						# Use -LiteralPath to handle paths with special characters like brackets
 						$gzFiles = Get-ChildItem -LiteralPath $extractedFiles[0] -Filter "*.gz" -Recurse
 						$zipfiles = Get-ChildItem -LiteralPath $extractedFiles[0] -Filter "*.zip" -Recurse
-
-						if ($gzFiles.Count -gt 0) {
-							Write-Host "Found $($gzFiles.Count) files to decompress."
-							foreach ($gzFile in $gzFiles) {
-								# Write-Host "Decompressing: $($gzFile.FullName)"
+						if ($gzFiles.Count -gt 0 -or $zipfiles.Count -gt 0) {
+							if ($gzFiles.Count -gt 0) {
+								Write-Host "Found $($gzFiles.Count) files to decompress."
+								foreach ($gzFile in $gzFiles) {
+									# Write-Host "Decompressing: $($gzFile.FullName)"
         
-								try {
-									# Construct the output filename by removing the .gz extension
-									$outputFilePath = [System.IO.Path]::Combine($gzFile.DirectoryName, [System.IO.Path]::GetFileNameWithoutExtension($gzFile.Name))
+									try {
+										# Construct the output filename by removing the .gz extension
+										$outputFilePath = [System.IO.Path]::Combine($gzFile.DirectoryName, [System.IO.Path]::GetFileNameWithoutExtension($gzFile.Name))
             
-									# Use a .NET stream to decompress the file
-									$sourceStream = [System.IO.File]::OpenRead($gzFile.FullName)
-									$gzipStream = New-Object System.IO.Compression.GZipStream($sourceStream, [System.IO.Compression.CompressionMode]::Decompress)
-									$destinationStream = [System.IO.File]::Create($outputFilePath)
+										# Use a .NET stream to decompress the file
+										$sourceStream = [System.IO.File]::OpenRead($gzFile.FullName)
+										$gzipStream = New-Object System.IO.Compression.GZipStream($sourceStream, [System.IO.Compression.CompressionMode]::Decompress)
+										$destinationStream = [System.IO.File]::Create($outputFilePath)
             
-									$gzipStream.CopyTo($destinationStream)
+										$gzipStream.CopyTo($destinationStream)
             
-									# Close the streams
-									$gzipStream.Close()
-									$sourceStream.Close()
-									$destinationStream.Close()
+										# Close the streams
+										$gzipStream.Close()
+										$sourceStream.Close()
+										$destinationStream.Close()
             
-									# Delete the original .gz file after successful decompression
-									Remove-Item -Path $gzFile.FullName
-									Write-Host "Decompressed successfully to: $outputFilePath" -ForegroundColor Green
-								}
-								catch {
-									Write-Host "Error decompressing $($gzFile.Name): $($_.Exception.Message)" -ForegroundColor Red
+										# Delete the original .gz file after successful decompression
+										Remove-Item -Path $gzFile.FullName
+										Write-Host "Decompressed successfully to: $outputFilePath" -ForegroundColor Green
+									}
+									catch {
+										Write-Host "Error decompressing $($gzFile.Name): $($_.Exception.Message)" -ForegroundColor Red
+									}
 								}
 							}
-						}
 					
-						if ($zipfiles.Count -gt 0) {
-							Write-Host "Found $($zipfiles.Count) files to decompress."
-							foreach ($zipFile in $zipfiles) {
-								# Write-Host "Decompressing: $($zipFile.FullName)"
-								try {
-									$outputFilePath = [System.IO.Path]::Combine($zipFile.DirectoryName, [System.IO.Path]::GetFileNameWithoutExtension($zipFile.Name))
-									Expand-Archive -Path $zipFile.FullName -DestinationPath $outputFilePath -Force
-									Remove-Item -Path $zipFile.FullName
-									Write-Host "Decompressed successfully to: $outputFilePath" -ForegroundColor Green
+							if ($zipfiles.Count -gt 0) {
+								Write-Host "Found $($zipfiles.Count) files to decompress."
+								foreach ($zipFile in $zipfiles) {
+									# Write-Host "Decompressing: $($zipFile.FullName)"
+									try {
+										$outputFilePath = [System.IO.Path]::Combine($zipFile.DirectoryName, [System.IO.Path]::GetFileNameWithoutExtension($zipFile.Name))
+										Expand-Archive -Path $zipFile.FullName -DestinationPath $outputFilePath -Force
+										Remove-Item -Path $zipFile.FullName
+										Write-Host "Decompressed successfully to: $outputFilePath" -ForegroundColor Green
+									}
+									catch {
+										Write-Host "Error decompressing $($zipFile.Name): $($_.Exception.Message)" -ForegroundColor Red
+									}
 								}
-								catch {
-									Write-Host "Error decompressing $($zipFile.Name): $($_.Exception.Message)" -ForegroundColor Red
-								}
-							}
 
+							}
 						}
 						else {
 							Write-Host "No nested files found to decompress." -ForegroundColor Gray
@@ -696,111 +697,111 @@ function Main {
 	}
 	else {
 		
-    if ($result.Success) {
+		if ($result.Success) {
 
-        Write-Host "✓ Successfully extracted: $(Split-Path $file.FullName -Leaf) to $($result.ExtractedFiles[0])" -ForegroundColor Green
-    }
-    else {
+			Write-Host "✓ Successfully extracted: $(Split-Path $file.FullName -Leaf) to $($result.ExtractedFiles[0])" -ForegroundColor Green
+		}
+		else {
         
-        Write-Host "✗ Extraction failed: $(Split-Path $file.FullName -Leaf)" -ForegroundColor Red
-    }
-    Write-Host ""
-}
-	
+			Write-Host "✗ Extraction failed: $(Split-Path $file.FullName -Leaf)" -ForegroundColor Red
+		}
+		Write-Host ""
 	}
-	# 	if ($successFiles.Count -gt 0) {
-	# 		foreach ($file in $successFiles) {
-	# 			Write-Host "  • $file" -ForegroundColor Gray
-	# 		}
-	# 	}
-	# 	if ($failCount -gt 0) {
-	# 		Write-Host "✗ Failed to extract: $failCount file(s)" -ForegroundColor Red
-	# 		foreach ($file in $failedFiles) {
-	# 			Write-Host "  • $file" -ForegroundColor Gray
-	# 		}
-	# 	}
+	
+}
+# 	if ($successFiles.Count -gt 0) {
+# 		foreach ($file in $successFiles) {
+# 			Write-Host "  • $file" -ForegroundColor Gray
+# 		}
+# 	}
+# 	if ($failCount -gt 0) {
+# 		Write-Host "✗ Failed to extract: $failCount file(s)" -ForegroundColor Red
+# 		foreach ($file in $failedFiles) {
+# 			Write-Host "  • $file" -ForegroundColor Gray
+# 		}
+# 	}
         
-	# 	# Show what files were actually created
-	# 	if ($allExtractedFiles.Count -gt 0) {
-	# 		Write-Host "`nFiles created:" -ForegroundColor Yellow
-	# 		Write-Host "DEBUG: About to analyze extracted files..." -ForegroundColor Gray
+# 	# Show what files were actually created
+# 	if ($allExtractedFiles.Count -gt 0) {
+# 		Write-Host "`nFiles created:" -ForegroundColor Yellow
+# 		Write-Host "DEBUG: About to analyze extracted files..." -ForegroundColor Gray
             
-	# 		# Analyze what was extracted - separate folders from files
-	# 		$topLevelFolders = @()
-	# 		$compressedFileCount = 0
-	# 		$foldersWithCompressedFiles = @()
+# 		# Analyze what was extracted - separate folders from files
+# 		$topLevelFolders = @()
+# 		$compressedFileCount = 0
+# 		$foldersWithCompressedFiles = @()
             
-	# 		Write-Host "DEBUG: Analyzing extracted items..." -ForegroundColor Gray
-	# 		foreach ($extractedItem in $allExtractedFiles) {
-	# 			if (Test-Path $extractedItem -PathType Container) {
-	# 				# It's a folder - get its name and check for compressed files inside
-	# 				$folderName = Split-Path $extractedItem -Leaf
-	# 				$topLevelFolders += $folderName
+# 		Write-Host "DEBUG: Analyzing extracted items..." -ForegroundColor Gray
+# 		foreach ($extractedItem in $allExtractedFiles) {
+# 			if (Test-Path $extractedItem -PathType Container) {
+# 				# It's a folder - get its name and check for compressed files inside
+# 				$folderName = Split-Path $extractedItem -Leaf
+# 				$topLevelFolders += $folderName
                     
-	# 				Write-Host "DEBUG: Checking folder '$folderName' for compressed files..." -ForegroundColor Gray
-	# 				try {
-	# 					$hasCompressedFiles = Get-ChildItem -Path $extractedItem -Recurse -File -ErrorAction SilentlyContinue | 
-	# 					Where-Object {
-	# 						$ext = $_.Extension.ToLower()
-	# 						$ext -in $SupportedExtensions -or $_.Name -match '\.(tar\.(gz|bz2|xz))$'
-	# 					} | Select-Object -First 1
+# 				Write-Host "DEBUG: Checking folder '$folderName' for compressed files..." -ForegroundColor Gray
+# 				try {
+# 					$hasCompressedFiles = Get-ChildItem -Path $extractedItem -Recurse -File -ErrorAction SilentlyContinue | 
+# 					Where-Object {
+# 						$ext = $_.Extension.ToLower()
+# 						$ext -in $SupportedExtensions -or $_.Name -match '\.(tar\.(gz|bz2|xz))$'
+# 					} | Select-Object -First 1
                         
-	# 					if ($hasCompressedFiles) {
-	# 						$foldersWithCompressedFiles += $folderName
-	# 						$compressedFileCount = 1  # Just indicate we found some
-	# 						Write-Host "DEBUG: Found compressed files in '$folderName'" -ForegroundColor Gray
-	# 					}
-	# 				}
-	# 				catch {
-	# 					Write-Verbose "Could not scan folder $extractedItem for compressed files"
-	# 				}
-	# 			}
-	# 			elseif (Test-Path $extractedItem -PathType Leaf) {
-	# 				# It's a file - check if it's compressed
-	# 				$fileExt = [System.IO.Path]::GetExtension($extractedItem).ToLower()
-	# 				if ($fileExt -in $SupportedExtensions -or $extractedItem -match '\.(tar\.(gz|bz2|xz))$') {
-	# 					$compressedFileCount = 1
-	# 					Write-Host "DEBUG: Found compressed file: $(Split-Path $extractedItem -Leaf)" -ForegroundColor Gray
-	# 				}
-	# 			}
-	# 		}
-	# 		Write-Host "DEBUG: Found $($topLevelFolders.Count) folders, $($foldersWithCompressedFiles.Count) with compressed files" -ForegroundColor Gray
+# 					if ($hasCompressedFiles) {
+# 						$foldersWithCompressedFiles += $folderName
+# 						$compressedFileCount = 1  # Just indicate we found some
+# 						Write-Host "DEBUG: Found compressed files in '$folderName'" -ForegroundColor Gray
+# 					}
+# 				}
+# 				catch {
+# 					Write-Verbose "Could not scan folder $extractedItem for compressed files"
+# 				}
+# 			}
+# 			elseif (Test-Path $extractedItem -PathType Leaf) {
+# 				# It's a file - check if it's compressed
+# 				$fileExt = [System.IO.Path]::GetExtension($extractedItem).ToLower()
+# 				if ($fileExt -in $SupportedExtensions -or $extractedItem -match '\.(tar\.(gz|bz2|xz))$') {
+# 					$compressedFileCount = 1
+# 					Write-Host "DEBUG: Found compressed file: $(Split-Path $extractedItem -Leaf)" -ForegroundColor Gray
+# 				}
+# 			}
+# 		}
+# 		Write-Host "DEBUG: Found $($topLevelFolders.Count) folders, $($foldersWithCompressedFiles.Count) with compressed files" -ForegroundColor Gray
             
-	# 		# Show summary of created files (first few)
-	# 		$maxFilesToShow = 5
-	# 		$filesShown = 0
-	# 		foreach ($extractedFile in $allExtractedFiles | Sort-Object) {
-	# 			if ($filesShown -lt $maxFilesToShow) {
-	# 				$relativePath = $extractedFile.Replace($DestinationPath, "").TrimStart('\', '/')
-	# 				Write-Host "  → $relativePath" -ForegroundColor Cyan
-	# 				$filesShown++
-	# 			}
-	# 			else {
-	# 				Write-Host "  → ... and $($allExtractedFiles.Count - $filesShown) more files" -ForegroundColor Cyan
-	# 				break
-	# 			}
-	# 		}
+# 		# Show summary of created files (first few)
+# 		$maxFilesToShow = 5
+# 		$filesShown = 0
+# 		foreach ($extractedFile in $allExtractedFiles | Sort-Object) {
+# 			if ($filesShown -lt $maxFilesToShow) {
+# 				$relativePath = $extractedFile.Replace($DestinationPath, "").TrimStart('\', '/')
+# 				Write-Host "  → $relativePath" -ForegroundColor Cyan
+# 				$filesShown++
+# 			}
+# 			else {
+# 				Write-Host "  → ... and $($allExtractedFiles.Count - $filesShown) more files" -ForegroundColor Cyan
+# 				break
+# 			}
+# 		}
             
-	# 		# Smart suggestion for compressed files
-	# 		if ($compressedFileCount -gt 0) {
-	# 			Write-Host "`n💡 Found $compressedFileCount compressed files that can be extracted!" -ForegroundColor Magenta
+# 		# Smart suggestion for compressed files
+# 		if ($compressedFileCount -gt 0) {
+# 			Write-Host "`n💡 Found $compressedFileCount compressed files that can be extracted!" -ForegroundColor Magenta
                 
-	# 			if ($topLevelFolders.Count -gt 0) {
-	# 				foreach ($folder in $topLevelFolders) {
-	# 					$folderPath = Join-Path $DestinationPath $folder
-	# 					Write-Host "📁 To extract all compressed files in '$folder':" -ForegroundColor Yellow
-	# 					Write-Host "   .\unzipFile.ps1 -SourcePath `"$folderPath`" -Recursive" -ForegroundColor Cyan
-	# 				}
-	# 			}
-	# 			else {
-	# 				Write-Host "� To extract all compressed files:" -ForegroundColor Yellow
-	# 				Write-Host "   .\unzipFile.ps1 -SourcePath `"$DestinationPath`" -Recursive" -ForegroundColor Cyan
-	# 			}
-	# 		}
-	# 	}
+# 			if ($topLevelFolders.Count -gt 0) {
+# 				foreach ($folder in $topLevelFolders) {
+# 					$folderPath = Join-Path $DestinationPath $folder
+# 					Write-Host "📁 To extract all compressed files in '$folder':" -ForegroundColor Yellow
+# 					Write-Host "   .\unzipFile.ps1 -SourcePath `"$folderPath`" -Recursive" -ForegroundColor Cyan
+# 				}
+# 			}
+# 			else {
+# 				Write-Host "� To extract all compressed files:" -ForegroundColor Yellow
+# 				Write-Host "   .\unzipFile.ps1 -SourcePath `"$DestinationPath`" -Recursive" -ForegroundColor Cyan
+# 			}
+# 		}
+# 	}
         
-	# 	Write-Host "`nDestination: $DestinationPath" -ForegroundColor Gray
-	# }
+# 	Write-Host "`nDestination: $DestinationPath" -ForegroundColor Gray
+# }
 
 
 # Show help if requested
