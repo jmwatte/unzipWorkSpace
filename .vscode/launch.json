@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug unzipFile.ps1 with Beatles.tar",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}\\Scripts\\unzipFile.ps1",
+            "args": [
+                "-SourcePath",
+                "I:\\mrbstof2014.tar.gz",
+				"-DestinationPath",
+				"I:"
+				
+            ],
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": false
+        },
+        {
+            "name": "Debug unzipFile.ps1 with Beatles.tar (WhatIf)",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}\\Scripts\\unzipFile.ps1",
+            "args": [
+                "-SourcePath",
+                "H:\\Beatles.tar",
+                "-WhatIf"
+            ],
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": false
+        },
+        {
+            "name": "Debug unzipFile.ps1 with Custom Parameters",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}\\Scripts\\unzipFile.ps1",
+            "args": [
+                "-SourcePath",
+                "${input:sourcePath}",
+                "-DestinationPath",
+                "${input:destinationPath}"
+            ],
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": false
+        }
+    ],
+    "inputs": [
+        {
+            "id": "sourcePath",
+            "description": "Source file or folder path",
+            "default": "H:\\Beatles.tar",
+            "type": "promptString"
+        },
+        {
+            "id": "destinationPath",
+            "description": "Destination folder path (optional)",
+            "default": "H:\\",
+            "type": "promptString"
+        }
+    ]
+}
