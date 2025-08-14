@@ -1,0 +1,42 @@
+name: Verify submodules
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-submodules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Validate submodule sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ensure submodules are populated
+          if [ ! -d "keymotion-trainer/.git" ] && [ ! -f "keymotion-trainer/.git" ]; then
+            echo "Submodule directory missing .git; initialization failed"
+            exit 1
+          fi
+
+          # Confirm git recognizes submodule is clean
+          git submodule status --recursive
+
+          # Fail if any submodule shows '-' (not initialized) or '+' (modified)
+          if git submodule status --recursive | grep -E '^[\-\+]'; then
+            echo "Submodules not initialized or have local modifications"
+            exit 1
+          fi
+
+      - name: Optional smoke
+        shell: bash
+        run: |
+          # Verify the submodule has its package.json (lightweight check)
+          test -f keymotion-trainer/package.json
