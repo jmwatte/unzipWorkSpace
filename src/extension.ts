@@ -108,6 +108,25 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
         if (m) return new vscode.Range(pos, pos.with(pos.line, pos.character + m[0].length));
         return undefined;
       }
+      case 'i': { // support 'iw' as inner word
+        const next = pending.shift();
+        if (next === 'w') {
+          const line = doc.lineAt(pos.line);
+          const text = line.text;
+          const left = text.slice(0, pos.character);
+          const right = text.slice(pos.character);
+          const leftMatch = /\w+$/.exec(left)?.[0].length ?? 0;
+          const rightMatch = /^\w+/.exec(right)?.[0].length ?? 0;
+          const start = new vscode.Position(pos.line, pos.character - leftMatch);
+          const end = new vscode.Position(pos.line, pos.character + rightMatch);
+          if (start.isBefore(end)) return new vscode.Range(start, end);
+        }
+        return undefined;
+      }
+      case '$': {
+        const end = doc.lineAt(pos.line).range.end;
+        return new vscode.Range(pos, end);
+      }
       case 'l': {
         const end = pos.with(pos.line, pos.character + 1);
         return new vscode.Range(pos, end);
@@ -132,6 +151,24 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
     await editor.edit((b) => b.delete(r));
     insertMode = true;
     if (statusItem) statusItem.text = 'INSERT';
+  }
+  else if (op === 'C') {
+    const end = doc.lineAt(pos.line).range.end;
+    const r2 = new vscode.Range(pos, end);
+    await editor.edit((b) => b.delete(r2));
+    insertMode = true;
+    if (statusItem) statusItem.text = 'INSERT';
+  }
+  else if (op === 'D') {
+    const end = doc.lineAt(pos.line).range.end;
+    const r2 = new vscode.Range(pos, end);
+    await editor.edit((b) => b.delete(r2));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+  }
+  else if (op === 'Y') {
+    const lineRange = doc.lineAt(pos.line).rangeIncludingLineBreak;
+    await vscode.env.clipboard.writeText(doc.getText(lineRange));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
   }
 }
 
@@ -186,9 +223,12 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       // Operators
-      if (key === 'd') { await operator(editor, 'd'); return; }
-      if (key === 'y') { await operator(editor, 'y'); return; }
-      if (key === 'c') { await operator(editor, 'c'); return; }
+  if (key === 'd') { await operator(editor, 'd'); return; }
+  if (key === 'y') { await operator(editor, 'y'); return; }
+  if (key === 'c') { await operator(editor, 'c'); return; }
+  if (key === 'C') { await operator(editor, 'C'); return; }
+  if (key === 'D') { await operator(editor, 'D'); return; }
+  if (key === 'Y') { await operator(editor, 'Y'); return; }
 
       // Motions
       for (let i = 0; i < count; i++) { await motion(editor, key); }
