@@ -16,18 +16,18 @@
       { "command": "keymotion.type", "title": "KeyMotion: Type (internal)" }
     ],
     "keybindings": [
-  { "command": "keymotion.type", "key": "type", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "h" }, "key": "h", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "j" }, "key": "j", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "k" }, "key": "k", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "l" }, "key": "l", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "w" }, "key": "w", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "d" }, "key": "d", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-  { "command": "keymotion.type", "args": { "key": "Escape" }, "key": "escape", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-  { "command": "keymotion.type", "args": { "key": "h" }, "key": "left",  "when": "keymotion.training && editorTextFocus && !inputFocus" },
-  { "command": "keymotion.type", "args": { "key": "j" }, "key": "down",  "when": "keymotion.training && editorTextFocus && !inputFocus" },
-  { "command": "keymotion.type", "args": { "key": "k" }, "key": "up",    "when": "keymotion.training && editorTextFocus && !inputFocus" },
-  { "command": "keymotion.type", "args": { "key": "l" }, "key": "right", "when": "keymotion.training && editorTextFocus && !inputFocus" }
+  { "command": "keymotion.type", "key": "type", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "h" }, "key": "h", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "j" }, "key": "j", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "k" }, "key": "k", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "l" }, "key": "l", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "w" }, "key": "w", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "d" }, "key": "d", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "Escape" }, "key": "escape", "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "h" }, "key": "left",  "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "j" }, "key": "down",  "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "k" }, "key": "up",    "when": "keymotion.training && editorTextFocus" },
+  { "command": "keymotion.type", "args": { "key": "l" }, "key": "right", "when": "keymotion.training && editorTextFocus" }
     ],
     "configuration": {
       "title": "KeyMotion Trainer",
