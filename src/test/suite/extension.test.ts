@@ -413,4 +413,43 @@ suite('KeyMotion basic ranges', () => {
     await vscode.commands.executeCommand('keymotion.type', { text: ',' });
   assert.strictEqual(doc.getText(), 'a \n');
   });
+
+  test('gg with count moves to line and supports operator range', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'L1\nL2\nL3\nL4\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    // Place cursor on line 3
+    ed.selection = new vscode.Selection(new vscode.Position(2, 0), new vscode.Position(2, 0));
+    // Move to line 2 via count gg
+    await vscode.commands.executeCommand('keymotion.type', { text: '2' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'g' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'g' });
+    assert.strictEqual(ed.selection.active.line, 1);
+    // Now delete from line 2 to line 4 using d G
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'G' });
+    assert.strictEqual(doc.getText(), 'L1\n');
+  });
+
+  test('G with count moves to that line and dG deletes to that line', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'A\nB\nC\nD\nE\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    // Start on line 1
+    ed.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    // Move to line 4: 4G
+    await vscode.commands.executeCommand('keymotion.type', { text: '4' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'G' });
+    assert.strictEqual(ed.selection.active.line, 3);
+    // From line 4, delete to line 2 using count on G via operator pending count should not interfere: d2G means delete to line 2
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: '2' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'G' });
+    // Remaining should be A\nE\n (deleted lines 2..4)
+    assert.strictEqual(doc.getText(), 'A\nE\n');
+  });
 });

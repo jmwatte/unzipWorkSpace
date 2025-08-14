@@ -29,6 +29,8 @@
   { "command": "keymotion.type", "args": { "key": "E" }, "key": "shift+e", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
   { "command": "keymotion.type", "args": { "key": "0" }, "key": "0", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
   { "command": "keymotion.type", "args": { "key": "$" }, "key": "shift+4", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
+  { "command": "keymotion.type", "args": { "key": "g" }, "key": "g", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
+  { "command": "keymotion.type", "args": { "key": "G" }, "key": "shift+g", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
   { "command": "keymotion.type", "args": { "key": "f" }, "key": "f", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
   { "command": "keymotion.type", "args": { "key": "F" }, "key": "shift+f", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
   { "command": "keymotion.type", "args": { "key": "t" }, "key": "t", "when": "keymotion.training && editorTextFocus && !keymotion.insert" },
