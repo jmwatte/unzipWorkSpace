@@ -25,6 +25,7 @@ function setTraining(on: boolean) {
   } else {
     if (statusItem) { statusItem.text = 'KeyMotion: OFF'; statusItem.hide(); }
     insertMode = false;
+  vscode.commands.executeCommand('setContext', 'keymotion.insert', false);
     pending = [];
     countBuffer = '';
   }
@@ -150,6 +151,7 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
   else if (op === 'c') {
     await editor.edit((b) => b.delete(r));
     insertMode = true;
+  vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
     if (statusItem) statusItem.text = 'INSERT';
   }
   else if (op === 'C') {
@@ -157,6 +159,7 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
     const r2 = new vscode.Range(pos, end);
     await editor.edit((b) => b.delete(r2));
     insertMode = true;
+  vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
     if (statusItem) statusItem.text = 'INSERT';
   }
   else if (op === 'D') {
@@ -184,9 +187,7 @@ export function activate(context: vscode.ExtensionContext) {
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
       if (key === 'Escape') {
-        if (insertMode) {
-          insertMode = false;
-        }
+  if (insertMode) { insertMode = false; vscode.commands.executeCommand('setContext', 'keymotion.insert', false); }
         pending = [];
         countBuffer = '';
         if (statusItem) { statusItem.text = 'KeyMotion: ON'; }
@@ -206,7 +207,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (key === 'Backspace') { await vscode.commands.executeCommand('deleteLeft'); return; }
         if (key === 'Tab') { await vscode.commands.executeCommand('type', { text: '\t' }); return; }
         if (key === 'Enter') { await vscode.commands.executeCommand('type', { text: '\n' }); return; }
-        return; // swallow anything else
+  return; // swallow anything else
       }
   if (statusItem) { statusItem.text = `KeyMotion: ${countBuffer ? countBuffer + ' ' : ''}${pending[0] ? pending[0] + ' … ' : ''}${key}`; }
 
