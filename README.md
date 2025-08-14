@@ -35,6 +35,19 @@ Run tests using Pester:
 Invoke-Pester
 ```
 
+## UnzipWorkspace module
+
+Import the module and use helpers:
+```powershell
+Import-Module ./Modules/UnzipWorkspace/UnzipWorkspace.psd1
+
+# Expand all .gz files under a folder
+Get-ChildItem -Path . -Recurse -Filter *.gz | Expand-GzipFiles
+
+# Batch unzip a list of archives into a temp root
+Invoke-BatchUnzip -Files @('I:\A.tar.gz','I:\B.zip') -Verbose
+```
+
 ## Requirements
 
 - PowerShell 5.1+ or PowerShell 7+
