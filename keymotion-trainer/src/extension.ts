@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 let training = false;
 let pending: string[] = [];
 let statusItem: vscode.StatusBarItem | undefined;
+let countBuffer: string = '';
 
 function setTraining(on: boolean) {
   training = on;
@@ -47,24 +48,44 @@ async function motion(editor: vscode.TextEditor, key: string) {
     const clampedCh = Math.max(0, Math.min(lineEnd, ch));
     return new vscode.Position(clampedLine, clampedCh);
   };
+  const moveWordForwardEnd = (p: vscode.Position): vscode.Position => {
+    const lineEnd = doc.lineAt(p.line).range.end;
+    const text = doc.getText(new vscode.Range(p, lineEnd));
+    const m = /\w+\W*/.exec(text);
+    if (m) return p.with(p.line, p.character + m[0].length);
+    return p;
+  };
+  const moveWordForward = (p: vscode.Position): vscode.Position => {
+    const lineEnd = doc.lineAt(p.line).range.end;
+    const text = doc.getText(new vscode.Range(p, lineEnd));
+    const m = /\W*\w+/.exec(text);
+    if (m) return p.with(p.line, p.character + m[0].length);
+    return p;
+  };
+  const moveWordBackward = (p: vscode.Position): vscode.Position => {
+    const lineStart = new vscode.Position(p.line, 0);
+    const text = doc.getText(new vscode.Range(lineStart, p));
+    const m = /\w+\W*$/.exec(text);
+    if (m) return p.with(p.line, p.character - m[0].length + (/\W+$/.exec(m[0])?.[0].length ?? 0));
+    return p.with(p.line, 0);
+  };
   switch (key) {
     case 'h': newPos = clampPos(pos.line, pos.character - 1); break; // left
     case 'l': newPos = clampPos(pos.line, pos.character + 1); break; // right
     case 'j': newPos = clampPos(pos.line + 1, pos.character); break; // down
     case 'k': newPos = clampPos(pos.line - 1, pos.character); break; // up
-    case 'w': {
-      const text = doc.getText(new vscode.Range(pos, doc.lineAt(pos.line).range.end));
-      const m = /\w+\W*/.exec(text);
-      if (m) newPos = pos.with(pos.line, pos.character + m[0].length);
-      break;
-    }
+  case '0': newPos = clampPos(pos.line, 0); break; // line start
+  case '$': newPos = doc.lineAt(pos.line).range.end; break; // line end
+  case 'w': newPos = moveWordForward(pos); break;
+  case 'e': newPos = moveWordForwardEnd(pos); break;
+  case 'b': newPos = moveWordBackward(pos); break;
   }
   editor.selections = [new vscode.Selection(newPos, newPos)];
 }
 
 async function operator(editor: vscode.TextEditor, op: string) {
   pending.push(op);
-  // status could be displayed via status bar later
+  if (statusItem) statusItem.text = `KeyMotion: ${op} …`; // waiting for motion
 }
 
 async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
@@ -94,9 +115,10 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
   const r = rangeFor(rangeKey);
   if (!r) { return; }
 
-  if (op === 'd') {
-  await editor.edit((b: vscode.TextEditorEdit) => b.delete(r));
-  }
+  if (op === 'd') { await editor.edit((b) => b.delete(r)); }
+  else if (op === 'y') { await vscode.env.clipboard.writeText(editor.document.getText(r)); editor.selections = [new vscode.Selection(r.start, r.start)]; }
+  else if (op === 'c') { await editor.edit((b) => b.delete(r)); }
+  if (statusItem) statusItem.text = 'KeyMotion: ON';
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -110,20 +132,28 @@ export function activate(context: vscode.ExtensionContext) {
       const key = normalizeKey(arg);
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
-  if (key === 'Escape') { pending = []; if (statusItem) { statusItem.text = 'KeyMotion: ON'; } return; }
+      if (key === 'Escape') { pending = []; countBuffer = ''; if (statusItem) { statusItem.text = 'KeyMotion: ON'; } return; }
       if (statusItem) { statusItem.text = `KeyMotion: ${key}`; }
+
+      // Counts
+      if (/^[1-9]$/.test(key)) { countBuffer += key; return; }
+
+      const count = Math.max(1, parseInt(countBuffer || '1', 10));
+      countBuffer = '';
 
       // If an operator is pending, treat this as range
       if (pending.length > 0) {
-        await applyOperatorRange(editor, key);
+        for (let i = 0; i < count; i++) { await applyOperatorRange(editor, key); }
         return;
       }
 
-  // Operators
-  if (key === 'd') { await operator(editor, 'd'); return; }
+      // Operators
+      if (key === 'd') { await operator(editor, 'd'); return; }
+      if (key === 'y') { await operator(editor, 'y'); return; }
+      if (key === 'c') { await operator(editor, 'c'); return; }
 
       // Motions
-      await motion(editor, key);
+      for (let i = 0; i < count; i++) { await motion(editor, key); }
     })
   );
 }
