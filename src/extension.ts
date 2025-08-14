@@ -133,10 +133,10 @@ export function activate(context: vscode.ExtensionContext) {
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
       if (key === 'Escape') { pending = []; countBuffer = ''; if (statusItem) { statusItem.text = 'KeyMotion: ON'; } return; }
-      if (statusItem) { statusItem.text = `KeyMotion: ${key}`; }
+  if (statusItem) { statusItem.text = `KeyMotion: ${countBuffer ? countBuffer + ' ' : ''}${pending[0] ? pending[0] + ' … ' : ''}${key}`; }
 
       // Counts
-      if (/^[1-9]$/.test(key)) { countBuffer += key; return; }
+  if (/^[1-9]$/.test(key)) { countBuffer += key; if (statusItem) statusItem.text = `KeyMotion: ${countBuffer}`; return; }
 
       const count = Math.max(1, parseInt(countBuffer || '1', 10));
       countBuffer = '';
