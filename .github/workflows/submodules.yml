@@ -12,11 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with submodules)
-  uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-    submodules: recursive
-    token: ${{ secrets.SUBMODULES_TOKEN }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}
 
       - name: Init submodules
         shell: bash
@@ -55,11 +55,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with submodules)
-  uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-    submodules: recursive
-    token: ${{ secrets.SUBMODULES_TOKEN }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN }}
 
       - name: Init submodules
         shell: bash
