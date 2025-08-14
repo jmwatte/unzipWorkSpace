@@ -342,4 +342,75 @@ suite('KeyMotion basic ranges', () => {
     await vscode.commands.executeCommand('keymotion.type', { text: 'W' });
   assert.strictEqual(doc.getText(), 'baz\n');
   });
+
+  test('dfx deletes up to and including first x', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'foo x bar x baz\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    ed.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'f' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'x' });
+    assert.strictEqual(doc.getText(), ' bar x baz\n');
+  });
+
+  test('dtx deletes up to before first x', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'abcxdef\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    ed.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 't' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'x' });
+    assert.strictEqual(doc.getText(), 'xdef\n');
+  });
+
+  test('2dfx deletes through the second x', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'a x b x c x\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    ed.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    await vscode.commands.executeCommand('keymotion.type', { text: '2' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'f' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'x' });
+    assert.strictEqual(doc.getText(), ' c x\n');
+  });
+
+  test('dfx then ; repeats with operator', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'x1 y x2 y x3\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    ed.selection = new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0));
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'f' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'y' });
+    // now repeat same direction
+    await vscode.commands.executeCommand('keymotion.type', { text: ';' });
+    assert.strictEqual(doc.getText().trimEnd(), ' x3');
+  });
+
+  test('Fx and , backward delete including x then repeat opposite', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const doc = await vscode.workspace.openTextDocument({ content: 'a x b x c\n', language: 'plaintext' });
+    await vscode.window.showTextDocument(doc);
+    await startAndFocus(doc);
+    const ed = vscode.window.activeTextEditor!;
+    const eol = doc.lineAt(0).range.end.character;
+    ed.selection = new vscode.Selection(new vscode.Position(0, eol), new vscode.Position(0, eol));
+    await vscode.commands.executeCommand('keymotion.type', { text: 'd' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'F' });
+    await vscode.commands.executeCommand('keymotion.type', { text: 'x' });
+    // repeat opposite direction using ,
+    await vscode.commands.executeCommand('keymotion.type', { text: ',' });
+  assert.strictEqual(doc.getText(), 'a \n');
+  });
 });

@@ -7,6 +7,10 @@ let countBuffer: string = '';
 let insertMode = false;
 let rangePrefix: string | undefined;
 let opCount: number | undefined;
+type FindType = 'f' | 'F' | 't' | 'T';
+let findPending: FindType | undefined;
+let lastFind: { type: FindType, ch: string } | undefined;
+let lastFindOp: 'd' | 'y' | 'c' | 'r' | undefined;
 
 function setTraining(on: boolean) {
   training = on;
@@ -19,6 +23,9 @@ function setTraining(on: boolean) {
   countBuffer = '';
   rangePrefix = undefined;
   opCount = undefined;
+  findPending = undefined;
+  lastFind = undefined;
+  lastFindOp = undefined;
   if (statusItem) { statusItem.color = undefined; }
     if (!statusItem) {
       statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -40,6 +47,9 @@ function setTraining(on: boolean) {
     countBuffer = '';
   rangePrefix = undefined;
   opCount = undefined;
+  findPending = undefined;
+  lastFind = undefined;
+  lastFindOp = undefined;
   }
 }
 
@@ -322,6 +332,99 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string, p
   }
 }
 
+async function performOpOnRange(editor: vscode.TextEditor, op: string, r: vscode.Range) {
+  if (op === 'd') {
+    await editor.edit(b => b.delete(r));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+    return;
+  }
+  if (op === 'y') {
+    await vscode.env.clipboard.writeText(editor.document.getText(r));
+    editor.selections = [new vscode.Selection(r.start, r.start)];
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+    return;
+  }
+  if (op === 'r') {
+    await vscode.env.clipboard.writeText(editor.document.getText(r));
+    await editor.edit(b => b.delete(r));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+    return;
+  }
+  if (op === 'c') {
+    await editor.edit(b => b.delete(r));
+    insertMode = true;
+    vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
+    if (statusItem) { statusItem.text = 'INSERT'; statusItem.color = '#00c853'; }
+  }
+}
+
+function invertFindType(t: FindType): FindType {
+  return t === 'f' ? 'F' : t === 'F' ? 'f' : t === 't' ? 'T' : 't';
+}
+
+function findRangeFor(editor: vscode.TextEditor, spec: { type: FindType, ch: string }, count: number): vscode.Range | undefined {
+  const doc = editor.document;
+  const pos = editor.selections[0].active;
+  const lineText = doc.lineAt(pos.line).text;
+  const ch = spec.ch;
+  if (!ch || ch.length !== 1) return undefined;
+  let idx = -1;
+  if (spec.type === 'f' || spec.type === 't') {
+    let start = pos.character + 1;
+    for (let i = 0; i < Math.max(1, count); i++) {
+      idx = lineText.indexOf(ch, start);
+      if (idx === -1) return undefined;
+      start = idx + 1;
+    }
+    const endCh = spec.type === 'f' ? idx + 1 : idx;
+    if (endCh <= pos.character) return undefined;
+    const end = new vscode.Position(pos.line, endCh);
+    return new vscode.Range(pos, end);
+  } else { // 'F' or 'T'
+    let start = Math.max(0, pos.character - 1);
+    for (let i = 0; i < Math.max(1, count); i++) {
+      idx = lineText.lastIndexOf(ch, start);
+      if (idx === -1) return undefined;
+      start = Math.max(0, idx - 1);
+    }
+    const startCh = spec.type === 'F' ? idx : idx + 1; // T excludes the target
+    if (startCh >= pos.character) return undefined;
+    const begin = new vscode.Position(pos.line, startCh);
+    return new vscode.Range(begin, pos);
+  }
+}
+
+async function applyFindMotion(editor: vscode.TextEditor, spec: { type: FindType, ch: string }, count: number) {
+  const doc = editor.document;
+  const sel = editor.selections[0];
+  const pos = sel.active;
+  const lineText = doc.lineAt(pos.line).text;
+  const ch = spec.ch;
+  if (!ch || ch.length !== 1) return;
+  let idx = -1;
+  if (spec.type === 'f' || spec.type === 't') {
+    let start = pos.character + 1;
+    for (let i = 0; i < Math.max(1, count); i++) {
+      idx = lineText.indexOf(ch, start);
+      if (idx === -1) return;
+      start = idx + 1;
+    }
+    const newCh = spec.type === 'f' ? idx : Math.max(0, idx - 1);
+    const np = new vscode.Position(pos.line, newCh);
+    editor.selections = [new vscode.Selection(np, np)];
+  } else {
+    let start = Math.max(0, pos.character - 1);
+    for (let i = 0; i < Math.max(1, count); i++) {
+      idx = lineText.lastIndexOf(ch, start);
+      if (idx === -1) return;
+      start = Math.max(0, idx - 1);
+    }
+    const newCh = spec.type === 'F' ? idx : idx + 1;
+    const np = new vscode.Position(pos.line, newCh);
+    editor.selections = [new vscode.Selection(np, np)];
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('keymotion.startTraining', () => setTraining(true)),
@@ -339,6 +442,7 @@ export function activate(context: vscode.ExtensionContext) {
         countBuffer = '';
   rangePrefix = undefined;
   opCount = undefined;
+  findPending = undefined;
       if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
         return;
       }
@@ -365,6 +469,30 @@ export function activate(context: vscode.ExtensionContext) {
 
   const count = Math.max(1, parseInt(countBuffer || '1', 10));
   countBuffer = '';
+
+      // Awaiting target for f/F/t/T
+      if (findPending) {
+        const text = (typeof arg === 'object' && typeof (arg as any).text === 'string') ? (arg as any).text : key;
+        if (typeof text !== 'string' || text.length !== 1) { return; }
+        const eff = Math.max(1, (opCount || 1) * count);
+        const spec = { type: findPending, ch: text } as { type: FindType, ch: string };
+        // Try applying as operator range if pending; otherwise motion
+    if (pending.length > 0) {
+          const r = findRangeFor(editor, spec, eff);
+          if (r) {
+            const opKey = pending.shift()!;
+            await performOpOnRange(editor, opKey, r);
+            rangePrefix = undefined;
+            opCount = undefined;
+      lastFindOp = opKey as any;
+          }
+        } else {
+          await applyFindMotion(editor, spec, eff);
+        }
+        lastFind = spec;
+        findPending = undefined;
+        return;
+      }
 
       // Immediate operators
       if (key === 'C' || key === 'D' || key === 'Y') {
@@ -415,6 +543,47 @@ export function activate(context: vscode.ExtensionContext) {
           editor.selections = [new vscode.Selection(endPos, endPos)];
           if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
         }
+        return;
+      }
+
+      // f/F/t/T: set up to receive a target character
+      if (key === 'f' || key === 'F' || key === 't' || key === 'T') {
+        findPending = key as FindType;
+        if (statusItem) statusItem.text = `KeyMotion: ${pending[0] ? pending[0] + ' ' : ''}${key} …`;
+        return;
+      }
+
+      // Repeat last find ; (same direction) and , (opposite)
+      if ((key === ';' || key === ',') && lastFind) {
+        const eff = Math.max(1, (opCount || 1) * count);
+        const primary = { type: key === ';' ? lastFind.type : invertFindType(lastFind.type), ch: lastFind.ch } as { type: FindType, ch: string };
+        const secondary = { type: invertFindType(primary.type), ch: primary.ch } as { type: FindType, ch: string };
+        if (pending.length > 0) {
+          let r = findRangeFor(editor, primary, eff);
+          if (!r) { r = findRangeFor(editor, secondary, eff); }
+          if (r) {
+            const opKey = pending.shift()!;
+            await performOpOnRange(editor, opKey, r);
+            rangePrefix = undefined;
+            opCount = undefined;
+          }
+        } else {
+          // If no operator pending, repeat prior operator+find if available; otherwise just motion
+          if (lastFindOp) {
+            let r = findRangeFor(editor, primary, eff);
+            if (!r) { r = findRangeFor(editor, secondary, eff); }
+            if (r) {
+              await performOpOnRange(editor, lastFindOp, r);
+            }
+          } else {
+            // motion fallback
+            let applied = false;
+            let r = findRangeFor(editor, primary, eff);
+            if (r) { await applyFindMotion(editor, primary, eff); applied = true; }
+            if (!applied) { await applyFindMotion(editor, secondary, eff); }
+          }
+        }
+        lastFind = primary; // record the requested direction
         return;
       }
 
