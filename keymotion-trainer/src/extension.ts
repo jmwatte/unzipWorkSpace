@@ -1,0 +1,112 @@
+import * as vscode from 'vscode';
+
+let training = false;
+let pending: string[] = [];
+
+function setTraining(on: boolean) {
+  training = on;
+  vscode.commands.executeCommand('setContext', 'keymotion.training', training);
+  if (training) {
+    // Open a sandbox buffer
+    vscode.workspace.openTextDocument({ content: 'KeyMotion Training — sandbox buffer\n\nPractice safely here. Press Esc to return to Normal mode.\n', language: 'plaintext' })
+        .then((doc: vscode.TextDocument) => vscode.window.showTextDocument(doc, { preview: false }));
+  }
+}
+
+function normalizeKey(arg: any): string | undefined {
+  if (!arg) { return undefined; }
+  const k = typeof arg === 'string' ? arg : arg.key;
+  if (!k) { return undefined; }
+  // For now, trust the "key"; a calibration view can adjust mapping later.
+  return k;
+}
+
+async function motion(editor: vscode.TextEditor, key: string) {
+  const doc = editor.document;
+  const sel = editor.selections[0];
+  const pos = sel.active;
+  let newPos = pos;
+  switch (key) {
+    case 'h': newPos = pos.with(pos.line, Math.max(0, pos.character - 1)); break;
+    case 'l': newPos = pos.with(pos.line, pos.character + 1); break;
+    case 'j': newPos = pos.with(pos.line, Math.min(doc.lineCount - 1, pos.line + 1)); break;
+    case 'k': newPos = pos.with(pos.line, Math.max(0, pos.line - 1)); break;
+    case 'w': {
+      const text = doc.getText(new vscode.Range(pos, doc.lineAt(pos.line).range.end));
+      const m = /\w+\W*/.exec(text);
+      if (m) newPos = pos.with(pos.line, pos.character + m[0].length);
+      break;
+    }
+  }
+  editor.selections = [new vscode.Selection(newPos, newPos)];
+}
+
+async function operator(editor: vscode.TextEditor, op: string) {
+  pending.push(op);
+  // status could be displayed via status bar later
+}
+
+async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
+  const op = pending.shift();
+  if (!op) { return; }
+  const doc = editor.document;
+  const sel = editor.selections[0];
+  const pos = sel.active;
+
+  function rangeFor(key: string): vscode.Range | undefined {
+    switch (key) {
+      case 'w': {
+        const lineEnd = doc.lineAt(pos.line).range.end;
+        const text = doc.getText(new vscode.Range(pos, lineEnd));
+        const m = /\w+\W*/.exec(text);
+        if (m) return new vscode.Range(pos, pos.with(pos.line, pos.character + m[0].length));
+        return undefined;
+      }
+      case 'l': {
+        const end = pos.with(pos.line, pos.character + 1);
+        return new vscode.Range(pos, end);
+      }
+    }
+    return undefined;
+  }
+
+  const r = rangeFor(rangeKey);
+  if (!r) { return; }
+
+  if (op === 'd') {
+  await editor.edit((b: vscode.TextEditorEdit) => b.delete(r));
+  }
+}
+
+export function activate(context: vscode.ExtensionContext) {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('keymotion.startTraining', () => setTraining(true)),
+    vscode.commands.registerCommand('keymotion.stopTraining', () => setTraining(false)),
+    vscode.commands.registerCommand('keymotion.toggleTraining', () => setTraining(!training)),
+    vscode.commands.registerCommand('keymotion.calibrate', () => vscode.window.showInformationMessage('Calibration coming soon.')),
+  vscode.commands.registerCommand('keymotion.type', async (arg: any) => {
+      if (!training) { return; }
+      const key = normalizeKey(arg);
+      const editor = vscode.window.activeTextEditor;
+      if (!key || !editor) { return; }
+      if (key === 'Escape') { pending = []; return; }
+
+      // If an operator is pending, treat this as range
+      if (pending.length > 0) {
+        await applyOperatorRange(editor, key);
+        return;
+      }
+
+      // Operators
+      if (key === 'd') { await operator(editor, 'd'); return; }
+
+      // Motions
+      await motion(editor, key);
+    })
+  );
+}
+
+export function deactivate() {
+  training = false;
+  pending = [];
+}
