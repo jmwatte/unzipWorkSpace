@@ -27,9 +27,12 @@ function setTraining(on: boolean) {
 
 function normalizeKey(arg: any): string | undefined {
   if (!arg) { return undefined; }
+  // If bound via 'type', VS Code sends { text: 'x' }
+  if (typeof arg === 'object' && typeof (arg as any).text === 'string') {
+    return (arg as any).text;
+  }
   const k = typeof arg === 'string' ? arg : arg.key;
   if (!k) { return undefined; }
-  // For now, trust the "key"; a calibration view can adjust mapping later.
   return k;
 }
 
@@ -97,11 +100,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('keymotion.toggleTraining', () => setTraining(!training)),
     vscode.commands.registerCommand('keymotion.calibrate', () => vscode.window.showInformationMessage('Calibration coming soon.')),
   vscode.commands.registerCommand('keymotion.type', async (arg: any) => {
-      if (!training) { return; }
+  if (!training) { return; }
       const key = normalizeKey(arg);
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
-      if (key === 'Escape') { pending = []; return; }
+  if (key === 'Escape') { pending = []; if (statusItem) { statusItem.text = 'KeyMotion: ON'; } return; }
       if (statusItem) { statusItem.text = `KeyMotion: ${key}`; }
 
       // If an operator is pending, treat this as range
@@ -110,8 +113,8 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // Operators
-      if (key === 'd') { await operator(editor, 'd'); return; }
+  // Operators
+  if (key === 'd') { await operator(editor, 'd'); return; }
 
       // Motions
       await motion(editor, key);

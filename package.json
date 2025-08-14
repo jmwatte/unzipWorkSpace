@@ -16,6 +16,7 @@
       { "command": "keymotion.type", "title": "KeyMotion: Type (internal)" }
     ],
     "keybindings": [
+  { "command": "keymotion.type", "key": "type", "when": "keymotion.training && editorTextFocus && !inputFocus" },
       { "command": "keymotion.type", "args": { "key": "h" }, "key": "h", "when": "keymotion.training && editorTextFocus && !inputFocus" },
       { "command": "keymotion.type", "args": { "key": "j" }, "key": "j", "when": "keymotion.training && editorTextFocus && !inputFocus" },
       { "command": "keymotion.type", "args": { "key": "k" }, "key": "k", "when": "keymotion.training && editorTextFocus && !inputFocus" },
