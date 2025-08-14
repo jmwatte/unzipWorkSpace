@@ -1,5 +1,7 @@
 # PowerShell Project
 
+[![Verify submodules & test](https://github.com/jmwatte/unzipWorkSpace/actions/workflows/submodules.yml/badge.svg)](https://github.com/jmwatte/unzipWorkSpace/actions/workflows/submodules.yml)
+
 A PowerShell project workspace for script development and automation.
 
 ## Project Structure
