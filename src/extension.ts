@@ -2,14 +2,26 @@ import * as vscode from 'vscode';
 
 let training = false;
 let pending: string[] = [];
+let statusItem: vscode.StatusBarItem | undefined;
 
 function setTraining(on: boolean) {
   training = on;
   vscode.commands.executeCommand('setContext', 'keymotion.training', training);
   if (training) {
+    if (!statusItem) {
+      statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+      statusItem.name = 'KeyMotion Trainer';
+      statusItem.text = 'KeyMotion: ON';
+      statusItem.show();
+    } else {
+      statusItem.text = 'KeyMotion: ON';
+      statusItem.show();
+    }
     // Open a sandbox buffer
     vscode.workspace.openTextDocument({ content: 'KeyMotion Training — sandbox buffer\n\nPractice safely here. Press Esc to return to Normal mode.\n', language: 'plaintext' })
         .then((doc: vscode.TextDocument) => vscode.window.showTextDocument(doc, { preview: false }));
+  } else {
+    if (statusItem) { statusItem.text = 'KeyMotion: OFF'; statusItem.hide(); }
   }
 }
 
@@ -27,10 +39,10 @@ async function motion(editor: vscode.TextEditor, key: string) {
   const pos = sel.active;
   let newPos = pos;
   switch (key) {
-    case 'h': newPos = pos.with(pos.line, Math.max(0, pos.character - 1)); break;
-    case 'l': newPos = pos.with(pos.line, pos.character + 1); break;
-    case 'j': newPos = pos.with(pos.line, Math.min(doc.lineCount - 1, pos.line + 1)); break;
-    case 'k': newPos = pos.with(pos.line, Math.max(0, pos.line - 1)); break;
+  case 'h': newPos = pos.with(pos.line, Math.max(0, pos.character - 1)); break; // left
+  case 'l': newPos = pos.with(pos.line, pos.character + 1); break; // right
+  case 'j': newPos = pos.with(pos.line, Math.min(doc.lineCount - 1, pos.line + 1)); break; // down
+  case 'k': newPos = pos.with(pos.line, Math.max(0, pos.line - 1)); break; // up
     case 'w': {
       const text = doc.getText(new vscode.Range(pos, doc.lineAt(pos.line).range.end));
       const m = /\w+\W*/.exec(text);
@@ -90,6 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
       if (key === 'Escape') { pending = []; return; }
+      if (statusItem) { statusItem.text = `KeyMotion: ${key}`; }
 
       // If an operator is pending, treat this as range
       if (pending.length > 0) {
@@ -109,4 +122,5 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
   training = false;
   pending = [];
+  if (statusItem) { statusItem.dispose(); statusItem = undefined; }
 }

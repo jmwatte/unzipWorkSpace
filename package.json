@@ -22,7 +22,11 @@
       { "command": "keymotion.type", "args": { "key": "l" }, "key": "l", "when": "keymotion.training && editorTextFocus && !inputFocus" },
       { "command": "keymotion.type", "args": { "key": "w" }, "key": "w", "when": "keymotion.training && editorTextFocus && !inputFocus" },
       { "command": "keymotion.type", "args": { "key": "d" }, "key": "d", "when": "keymotion.training && editorTextFocus && !inputFocus" },
-      { "command": "keymotion.type", "args": { "key": "Escape" }, "key": "escape", "when": "keymotion.training && editorTextFocus && !inputFocus" }
+  { "command": "keymotion.type", "args": { "key": "Escape" }, "key": "escape", "when": "keymotion.training && editorTextFocus && !inputFocus" },
+  { "command": "keymotion.type", "args": { "key": "h" }, "key": "left",  "when": "keymotion.training && editorTextFocus && !inputFocus" },
+  { "command": "keymotion.type", "args": { "key": "j" }, "key": "down",  "when": "keymotion.training && editorTextFocus && !inputFocus" },
+  { "command": "keymotion.type", "args": { "key": "k" }, "key": "up",    "when": "keymotion.training && editorTextFocus && !inputFocus" },
+  { "command": "keymotion.type", "args": { "key": "l" }, "key": "right", "when": "keymotion.training && editorTextFocus && !inputFocus" }
     ],
     "configuration": {
       "title": "KeyMotion Trainer",
