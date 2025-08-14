@@ -20,6 +20,17 @@
     .\BatchUnzip.ps1 -Files @('I:\A.tar.gz','I:\B.zip')
 .EXAMPLE
     .\BatchUnzip.ps1 -ListPath .\archives.txt -DestinationRoot D:\Extracted -Verbose
+.EXAMPLE
+    # Pipe per-file to unziping.ps1
+    Get-ChildItem -Path . -Filter *.gz -File | ForEach-Object {
+        & .\Scripts\unziping.ps1 -SourcePath $_.FullName -DestinationPath "$env:TEMP\unz" -Verbose
+    }
+.EXAMPLE
+    # Use BatchUnzip with a collected list
+    & .\Scripts\BatchUnzip.ps1 -Files (Get-ChildItem -Path . -Filter *.gz -File | Select-Object -Expand FullName) -Verbose
+.EXAMPLE
+    # Search recursively and include multiple types
+    & .\Scripts\BatchUnzip.ps1 -Files (Get-ChildItem -Path I:\ -Recurse -File -Include *.tar.gz,*.tgz,*.zip,*.gz | Select-Object -Expand FullName)
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
