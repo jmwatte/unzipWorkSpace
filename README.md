@@ -37,3 +37,29 @@ Invoke-Pester
 
 - PowerShell 5.1+ or PowerShell 7+
 - Pester (for testing)
+
+## KeyMotion Trainer submodule
+
+This workspace includes the VS Code extension project `keymotion-trainer` as a Git submodule.
+
+- First-time clone (or when CI needs submodules):
+	```powershell
+	git submodule update --init --recursive
+	```
+- Pull latest submodule commits (when upstream `keymotion-trainer` has moved):
+	```powershell
+	git submodule update --remote --recursive
+	```
+- Working inside the submodule (commits go to its own repo):
+	```powershell
+	Set-Location keymotion-trainer
+	# make changes, test, then
+	git add -A
+	git commit -m "feat: ..."
+	git push
+	Set-Location ..
+	# record new submodule pointer in this repo
+	git add keymotion-trainer
+	git commit -m "chore(submodule): bump keymotion-trainer"
+	git push
+	```
