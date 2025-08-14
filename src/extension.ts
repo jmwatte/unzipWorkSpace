@@ -5,11 +5,21 @@ let pending: string[] = [];
 let statusItem: vscode.StatusBarItem | undefined;
 let countBuffer: string = '';
 let insertMode = false;
+let rangePrefix: string | undefined;
+let opCount: number | undefined;
 
 function setTraining(on: boolean) {
   training = on;
   vscode.commands.executeCommand('setContext', 'keymotion.training', training);
   if (training) {
+  // Fresh state when turning training on
+  insertMode = false;
+  vscode.commands.executeCommand('setContext', 'keymotion.insert', false);
+  pending = [];
+  countBuffer = '';
+  rangePrefix = undefined;
+  opCount = undefined;
+  if (statusItem) { statusItem.color = undefined; }
     if (!statusItem) {
       statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
       statusItem.name = 'KeyMotion Trainer';
@@ -28,6 +38,8 @@ function setTraining(on: boolean) {
   vscode.commands.executeCommand('setContext', 'keymotion.insert', false);
     pending = [];
     countBuffer = '';
+  rangePrefix = undefined;
+  opCount = undefined;
   }
 }
 
@@ -60,6 +72,13 @@ async function motion(editor: vscode.TextEditor, key: string) {
     if (m) return p.with(p.line, p.character + m[0].length);
     return p;
   };
+  const moveWORDForwardEnd = (p: vscode.Position): vscode.Position => {
+    const lineEnd = doc.lineAt(p.line).range.end;
+    const text = doc.getText(new vscode.Range(p, lineEnd));
+    const m = /\S+\s*/.exec(text);
+    if (m) return p.with(p.line, p.character + m[0].length);
+    return p;
+  };
   const moveWordForward = (p: vscode.Position): vscode.Position => {
     const lineEnd = doc.lineAt(p.line).range.end;
     const text = doc.getText(new vscode.Range(p, lineEnd));
@@ -67,12 +86,33 @@ async function motion(editor: vscode.TextEditor, key: string) {
     if (m) return p.with(p.line, p.character + m[0].length);
     return p;
   };
+  const moveWORDForward = (p: vscode.Position): vscode.Position => {
+    const lineEnd = doc.lineAt(p.line).range.end;
+    const text = doc.getText(new vscode.Range(p, lineEnd));
+    const m = /\s*\S+/.exec(text);
+    if (m) return p.with(p.line, p.character + m[0].length);
+    return p;
+  };
   const moveWordBackward = (p: vscode.Position): vscode.Position => {
+  const lineStart = new vscode.Position(p.line, 0);
+  const left = doc.getText(new vscode.Range(lineStart, p));
+  // Skip any trailing non-word characters before the word
+  const trailingNonWord = /\W+$/.exec(left)?.[0].length ?? 0;
+  const i = left.length - trailingNonWord;
+  const before = left.slice(0, Math.max(0, i));
+  const wordLen = /\w+$/.exec(before)?.[0].length ?? 0;
+  const startCh = Math.max(0, i - wordLen);
+  return new vscode.Position(p.line, startCh);
+  };
+  const moveWORDBackward = (p: vscode.Position): vscode.Position => {
     const lineStart = new vscode.Position(p.line, 0);
-    const text = doc.getText(new vscode.Range(lineStart, p));
-    const m = /\w+\W*$/.exec(text);
-    if (m) return p.with(p.line, p.character - m[0].length + (/\W+$/.exec(m[0])?.[0].length ?? 0));
-    return p.with(p.line, 0);
+    const left = doc.getText(new vscode.Range(lineStart, p));
+    const trailingSpaces = /\s+$/.exec(left)?.[0].length ?? 0;
+    const i = left.length - trailingSpaces;
+    const before = left.slice(0, Math.max(0, i));
+    const segLen = /\S+$/.exec(before)?.[0].length ?? 0;
+    const startCh = Math.max(0, i - segLen);
+    return new vscode.Position(p.line, startCh);
   };
   switch (key) {
     case 'h': newPos = clampPos(pos.line, pos.character - 1); break; // left
@@ -84,6 +124,9 @@ async function motion(editor: vscode.TextEditor, key: string) {
   case 'w': newPos = moveWordForward(pos); break;
   case 'e': newPos = moveWordForwardEnd(pos); break;
   case 'b': newPos = moveWordBackward(pos); break;
+  case 'W': newPos = moveWORDForward(pos); break;
+  case 'E': newPos = moveWORDForwardEnd(pos); break;
+  case 'B': newPos = moveWORDBackward(pos); break;
   }
   editor.selections = [new vscode.Selection(newPos, newPos)];
 }
@@ -93,50 +136,168 @@ async function operator(editor: vscode.TextEditor, op: string) {
   if (statusItem) statusItem.text = `KeyMotion: ${op} …`; // waiting for motion
 }
 
-async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
+async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string, prefix?: string, count: number = 1) {
   const op = pending.shift();
   if (!op) { return; }
   const doc = editor.document;
   const sel = editor.selections[0];
   const pos = sel.active;
 
-  function rangeFor(key: string): vscode.Range | undefined {
+  function rangeFor(key: string, n: number): vscode.Range | undefined {
+    // Text object: inner word (iw/iW, aw/aW) has priority over motion keys
+    if (prefix === 'i' && key === 'w') {
+      const line = doc.lineAt(pos.line);
+      const text = line.text;
+      const left = text.slice(0, pos.character);
+      const right = text.slice(pos.character);
+      const leftMatch = /\w+$/.exec(left)?.[0].length ?? 0;
+      const rightMatch = /^\w+/.exec(right)?.[0].length ?? 0;
+      const start = new vscode.Position(pos.line, pos.character - leftMatch);
+      const end = new vscode.Position(pos.line, pos.character + rightMatch);
+      if (start.isBefore(end)) return new vscode.Range(start, end);
+      return undefined;
+    }
+    if (prefix === 'i' && key === 'W') {
+      const line = doc.lineAt(pos.line);
+      const text = line.text;
+      const left = text.slice(0, pos.character);
+      const right = text.slice(pos.character);
+      const leftMatch = /\S+$/.exec(left)?.[0].length ?? 0;
+      const rightMatch = /^\S+/.exec(right)?.[0].length ?? 0;
+      const start = new vscode.Position(pos.line, pos.character - leftMatch);
+      const end = new vscode.Position(pos.line, pos.character + rightMatch);
+      if (start.isBefore(end)) return new vscode.Range(start, end);
+      return undefined;
+    }
+    if (prefix === 'a' && key === 'w') {
+      const line = doc.lineAt(pos.line);
+      const text = line.text;
+      const left = text.slice(0, pos.character);
+      const right = text.slice(pos.character);
+      const leftMatch = /\w+$/.exec(left)?.[0].length ?? 0;
+      const rightMatch = /^\w+/.exec(right)?.[0].length ?? 0;
+      const start = new vscode.Position(pos.line, pos.character - leftMatch);
+      let end = new vscode.Position(pos.line, pos.character + rightMatch);
+      // include trailing spaces after the word
+      const after = text.slice(end.character);
+      const spaces = /^\s+/.exec(after)?.[0].length ?? 0;
+      end = new vscode.Position(pos.line, end.character + spaces);
+      if (start.isBefore(end)) return new vscode.Range(start, end);
+      return undefined;
+    }
+    if (prefix === 'a' && key === 'W') {
+      const line = doc.lineAt(pos.line);
+      const text = line.text;
+      const left = text.slice(0, pos.character);
+      const right = text.slice(pos.character);
+      const leftMatch = /\S+$/.exec(left)?.[0].length ?? 0;
+      const rightMatch = /^\S+/.exec(right)?.[0].length ?? 0;
+      const start = new vscode.Position(pos.line, pos.character - leftMatch);
+      let end = new vscode.Position(pos.line, pos.character + rightMatch);
+      // include trailing spaces after the WORD
+      const after = text.slice(end.character);
+      const spaces = /^\s+/.exec(after)?.[0].length ?? 0;
+      end = new vscode.Position(pos.line, end.character + spaces);
+      if (start.isBefore(end)) return new vscode.Range(start, end);
+      return undefined;
+    }
     switch (key) {
       case 'w': {
-        const lineEnd = doc.lineAt(pos.line).range.end;
-        const text = doc.getText(new vscode.Range(pos, lineEnd));
-        const m = /\w+\W*/.exec(text);
-        if (m) return new vscode.Range(pos, pos.with(pos.line, pos.character + m[0].length));
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineEnd = doc.lineAt(cur.line).range.end;
+          const text = doc.getText(new vscode.Range(cur, lineEnd));
+          const m = /\w+\W*/.exec(text);
+          if (m) cur = cur.with(cur.line, cur.character + m[0].length);
+        }
+        if (cur.isAfter(pos)) return new vscode.Range(pos, cur);
         return undefined;
       }
-      case 'i': { // support 'iw' as inner word
-        const next = pending.shift();
-        if (next === 'w') {
-          const line = doc.lineAt(pos.line);
-          const text = line.text;
-          const left = text.slice(0, pos.character);
-          const right = text.slice(pos.character);
-          const leftMatch = /\w+$/.exec(left)?.[0].length ?? 0;
-          const rightMatch = /^\w+/.exec(right)?.[0].length ?? 0;
-          const start = new vscode.Position(pos.line, pos.character - leftMatch);
-          const end = new vscode.Position(pos.line, pos.character + rightMatch);
-          if (start.isBefore(end)) return new vscode.Range(start, end);
+      case 'W': {
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineEnd = doc.lineAt(cur.line).range.end;
+          const text = doc.getText(new vscode.Range(cur, lineEnd));
+          const m = /\S+/.exec(text);
+          if (m) cur = cur.with(cur.line, cur.character + m[0].length);
         }
+        if (cur.isAfter(pos)) return new vscode.Range(pos, cur);
+        return undefined;
+      }
+      case 'e': {
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineEnd = doc.lineAt(cur.line).range.end;
+          const text = doc.getText(new vscode.Range(cur, lineEnd));
+          const m = /\w+/.exec(text);
+          if (m) cur = cur.with(cur.line, cur.character + m[0].length);
+        }
+        if (cur.isAfter(pos)) return new vscode.Range(pos, cur);
+        return undefined;
+      }
+      case 'E': {
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineEnd = doc.lineAt(cur.line).range.end;
+          const text = doc.getText(new vscode.Range(cur, lineEnd));
+          const m = /\S+/.exec(text);
+          if (m) cur = cur.with(cur.line, cur.character + m[0].length);
+        }
+        if (cur.isAfter(pos)) return new vscode.Range(pos, cur);
+        return undefined;
+      }
+      case 'b': {
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineStart = new vscode.Position(cur.line, 0);
+          const left = doc.getText(new vscode.Range(lineStart, cur));
+          const trailingNonWord = /\W+$/.exec(left)?.[0].length ?? 0;
+          const idx = left.length - trailingNonWord;
+          const before = left.slice(0, Math.max(0, idx));
+          const wordLen = /\w+$/.exec(before)?.[0].length ?? 0;
+          const startCh = Math.max(0, idx - wordLen);
+          cur = new vscode.Position(cur.line, startCh);
+        }
+        if (cur.isBefore(pos)) return new vscode.Range(cur, pos);
+        return undefined;
+      }
+      case 'B': {
+        let cur = pos;
+        for (let i = 0; i < Math.max(1, n); i++) {
+          const lineStart = new vscode.Position(cur.line, 0);
+          const left = doc.getText(new vscode.Range(lineStart, cur));
+          const trailingSpaces = /\s+$/.exec(left)?.[0].length ?? 0;
+          const idx = left.length - trailingSpaces;
+          const before = left.slice(0, Math.max(0, idx));
+          const segLen = /\S+$/.exec(before)?.[0].length ?? 0;
+          const startCh = Math.max(0, idx - segLen);
+          cur = new vscode.Position(cur.line, startCh);
+        }
+        if (cur.isBefore(pos)) return new vscode.Range(cur, pos);
         return undefined;
       }
       case '$': {
         const end = doc.lineAt(pos.line).range.end;
         return new vscode.Range(pos, end);
       }
+      case '0': {
+        const start = new vscode.Position(pos.line, 0);
+        return new vscode.Range(start, pos);
+      }
       case 'l': {
-        const end = pos.with(pos.line, pos.character + 1);
+        const end = pos.with(pos.line, Math.min(doc.lineAt(pos.line).range.end.character, pos.character + Math.max(1, n)));
         return new vscode.Range(pos, end);
+      }
+      case 'h': {
+        const startCh = Math.max(0, pos.character - Math.max(1, n));
+        const start = pos.with(pos.line, startCh);
+        return new vscode.Range(start, pos);
       }
     }
     return undefined;
   }
 
-  const r = rangeFor(rangeKey);
+  const r = rangeFor(rangeKey, count);
   if (!r) { return; }
 
   if (op === 'd') {
@@ -148,30 +309,16 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
     editor.selections = [new vscode.Selection(r.start, r.start)];
     if (statusItem) statusItem.text = 'KeyMotion: ON';
   }
+  else if (op === 'r') {
+    await vscode.env.clipboard.writeText(editor.document.getText(r));
+    await editor.edit((b) => b.delete(r));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+  }
   else if (op === 'c') {
     await editor.edit((b) => b.delete(r));
     insertMode = true;
   vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
-    if (statusItem) statusItem.text = 'INSERT';
-  }
-  else if (op === 'C') {
-    const end = doc.lineAt(pos.line).range.end;
-    const r2 = new vscode.Range(pos, end);
-    await editor.edit((b) => b.delete(r2));
-    insertMode = true;
-  vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
-    if (statusItem) statusItem.text = 'INSERT';
-  }
-  else if (op === 'D') {
-    const end = doc.lineAt(pos.line).range.end;
-    const r2 = new vscode.Range(pos, end);
-    await editor.edit((b) => b.delete(r2));
-    if (statusItem) statusItem.text = 'KeyMotion: ON';
-  }
-  else if (op === 'Y') {
-    const lineRange = doc.lineAt(pos.line).rangeIncludingLineBreak;
-    await vscode.env.clipboard.writeText(doc.getText(lineRange));
-    if (statusItem) statusItem.text = 'KeyMotion: ON';
+  if (statusItem) { statusItem.text = 'INSERT'; statusItem.color = '#00c853'; }
   }
 }
 
@@ -190,13 +337,15 @@ export function activate(context: vscode.ExtensionContext) {
   if (insertMode) { insertMode = false; vscode.commands.executeCommand('setContext', 'keymotion.insert', false); }
         pending = [];
         countBuffer = '';
-        if (statusItem) { statusItem.text = 'KeyMotion: ON'; }
+  rangePrefix = undefined;
+  opCount = undefined;
+      if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
         return;
       }
 
       // INSERT mode: forward characters to the editor
       if (insertMode) {
-        if (statusItem) statusItem.text = 'INSERT';
+  if (statusItem) { statusItem.text = 'INSERT'; statusItem.color = '#00c853'; }
         // Prefer arg.text when available (from 'type')
         const text = (typeof arg === 'object' && typeof (arg as any).text === 'string') ? (arg as any).text : undefined;
         if (typeof text === 'string' && text.length > 0) {
@@ -209,27 +358,115 @@ export function activate(context: vscode.ExtensionContext) {
         if (key === 'Enter') { await vscode.commands.executeCommand('type', { text: '\n' }); return; }
   return; // swallow anything else
       }
-  if (statusItem) { statusItem.text = `KeyMotion: ${countBuffer ? countBuffer + ' ' : ''}${pending[0] ? pending[0] + ' … ' : ''}${key}`; }
+  if (statusItem) { statusItem.text = `KeyMotion: ${countBuffer ? countBuffer + ' ' : ''}${pending[0] ? pending[0] + ' … ' : ''}${key}`; statusItem.color = undefined; }
 
       // Counts
   if (/^[1-9]$/.test(key)) { countBuffer += key; if (statusItem) statusItem.text = `KeyMotion: ${countBuffer}`; return; }
 
-      const count = Math.max(1, parseInt(countBuffer || '1', 10));
-      countBuffer = '';
+  const count = Math.max(1, parseInt(countBuffer || '1', 10));
+  countBuffer = '';
 
-      // If an operator is pending, treat this as range
-      if (pending.length > 0) {
-        for (let i = 0; i < count; i++) { await applyOperatorRange(editor, key); }
+      // Immediate operators
+      if (key === 'C' || key === 'D' || key === 'Y') {
+        const doc2 = editor.document;
+        const pos2 = editor.selections[0].active;
+        if (key === 'C' || key === 'D') {
+          const end2 = doc2.lineAt(pos2.line).range.end;
+          const r2 = new vscode.Range(pos2, end2);
+          await editor.edit(b => b.delete(r2));
+          if (key === 'C') {
+            insertMode = true;
+            vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
+            if (statusItem) { statusItem.text = 'INSERT'; statusItem.color = '#00c853'; }
+          } else {
+            if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
+          }
+        } else if (key === 'Y') {
+          const lineRange2 = doc2.lineAt(pos2.line).rangeIncludingLineBreak;
+          await vscode.env.clipboard.writeText(doc2.getText(lineRange2));
+          if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
+        }
         return;
       }
 
-      // Operators
-  if (key === 'd') { await operator(editor, 'd'); return; }
-  if (key === 'y') { await operator(editor, 'y'); return; }
-  if (key === 'c') { await operator(editor, 'c'); return; }
-  if (key === 'C') { await operator(editor, 'C'); return; }
-  if (key === 'D') { await operator(editor, 'D'); return; }
-  if (key === 'Y') { await operator(editor, 'Y'); return; }
+  // Paste commands (basic): p (after), P (before)
+      if (key === 'p' || key === 'P') {
+        const pasteText = await vscode.env.clipboard.readText();
+        if (pasteText && pasteText.length > 0) {
+          const doc3 = editor.document;
+          const cur = editor.selections[0].active;
+          const isLine = pasteText.endsWith('\n');
+          let target = cur;
+          if (isLine) {
+            if (key === 'p') {
+              // start of next line
+              const nextLine = Math.min(doc3.lineCount, cur.line + 1);
+              target = new vscode.Position(nextLine, 0);
+            } else {
+              // start of current line
+              target = new vscode.Position(cur.line, 0);
+            }
+          } else {
+    // For characterwise, paste at caret for both p and P
+    target = cur;
+          }
+          await editor.edit(b => b.insert(target, pasteText));
+          const endPos = new vscode.Position(target.line, target.character + pasteText.length);
+          editor.selections = [new vscode.Selection(endPos, endPos)];
+          if (statusItem) { statusItem.text = 'KeyMotion: ON'; statusItem.color = undefined; }
+        }
+        return;
+      }
+
+      // If an operator is pending, treat this as range or text object
+      if (pending.length > 0) {
+        if (key === 'i' || key === 'a') {
+          rangePrefix = key;
+          if (statusItem) statusItem.text = `KeyMotion: ${pending[0]} ${rangePrefix} …`;
+          return;
+        }
+        // dd/yy/cc: line operations when repeating operator key
+    if ((key === 'd' || key === 'y' || key === 'c') && pending[0] === key) {
+          const opKey = pending.shift()!;
+          const docL = editor.document;
+          const cur = editor.selections[0].active;
+          const eff = Math.max(1, (opCount || 1) * count);
+          const start = new vscode.Position(cur.line, 0);
+          const lastLine = Math.min(docL.lineCount - 1, cur.line + eff - 1);
+          const endForYank = docL.lineAt(lastLine).rangeIncludingLineBreak.end;
+          if (opKey === 'y') {
+            await vscode.env.clipboard.writeText(docL.getText(new vscode.Range(start, endForYank)));
+            if (statusItem) statusItem.text = 'KeyMotion: ON';
+          } else if (opKey === 'd') {
+            await editor.edit(b => b.delete(new vscode.Range(start, endForYank)));
+            if (statusItem) statusItem.text = 'KeyMotion: ON';
+          } else if (opKey === 'c') {
+      // Change current line(s): delete eff lines and leave one empty line, enter INSERT
+      await editor.edit(b => b.delete(new vscode.Range(start, endForYank)));
+      // Ensure a blank line remains at the original position
+      await editor.edit(b => b.insert(start, "\n"));
+      editor.selections = [new vscode.Selection(start, start)];
+            insertMode = true;
+            vscode.commands.executeCommand('setContext', 'keymotion.insert', true);
+      if (statusItem) { statusItem.text = 'INSERT'; statusItem.color = '#00c853'; }
+          }
+          rangePrefix = undefined;
+          opCount = undefined;
+          return;
+        }
+        const prefixToUse = rangePrefix;
+        rangePrefix = undefined;
+  const effective = Math.max(1, (opCount || 1) * count);
+  await applyOperatorRange(editor, key, prefixToUse, effective);
+  opCount = undefined;
+        return;
+      }
+
+  // Operators (capture any leading count as operator count)
+  if (key === 'd') { opCount = count; await operator(editor, 'd'); return; }
+  if (key === 'y') { opCount = count; await operator(editor, 'y'); return; }
+  if (key === 'c') { opCount = count; await operator(editor, 'c'); return; }
+  if (key === 'r') { opCount = count; await operator(editor, 'r'); return; }
 
       // Motions
       for (let i = 0; i < count; i++) { await motion(editor, key); }
