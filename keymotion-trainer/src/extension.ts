@@ -11,6 +11,8 @@ type FindType = 'f' | 'F' | 't' | 'T';
 let findPending: FindType | undefined;
 let lastFind: { type: FindType, ch: string } | undefined;
 let lastFindOp: 'd' | 'y' | 'c' | 'r' | undefined;
+let gPending: boolean = false;
+let gCount: number | undefined;
 
 function setTraining(on: boolean) {
   training = on;
@@ -26,6 +28,8 @@ function setTraining(on: boolean) {
   findPending = undefined;
   lastFind = undefined;
   lastFindOp = undefined;
+  gPending = false;
+  gCount = undefined;
   if (statusItem) { statusItem.color = undefined; }
     if (!statusItem) {
       statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -50,6 +54,8 @@ function setTraining(on: boolean) {
   findPending = undefined;
   lastFind = undefined;
   lastFindOp = undefined;
+  gPending = false;
+  gCount = undefined;
   }
 }
 
@@ -467,8 +473,37 @@ export function activate(context: vscode.ExtensionContext) {
       // Counts
   if (/^[1-9]$/.test(key)) { countBuffer += key; if (statusItem) statusItem.text = `KeyMotion: ${countBuffer}`; return; }
 
+  const hadCount = countBuffer.length > 0;
   const count = Math.max(1, parseInt(countBuffer || '1', 10));
   countBuffer = '';
+
+      // Handle second key of 'gg' if pending
+      if (gPending) {
+        const useCount = gCount && gCount > 0 ? gCount : 1;
+        gPending = false;
+        gCount = undefined;
+        if (key === 'g') {
+          const targetLine = Math.max(0, useCount - 1);
+          const editor2 = vscode.window.activeTextEditor!;
+          const cur = editor2.selections[0].active;
+          if (pending.length > 0) {
+            const opKey = pending.shift()!;
+            const docL = editor2.document;
+            const startLine = Math.min(cur.line, targetLine);
+            const endLine = Math.max(cur.line, targetLine);
+            const start = new vscode.Position(startLine, 0);
+            const end = docL.lineAt(endLine).rangeIncludingLineBreak.end;
+            await performOpOnRange(editor2, opKey, new vscode.Range(start, end));
+            rangePrefix = undefined;
+            opCount = undefined;
+          } else {
+            const np = new vscode.Position(targetLine, 0);
+            editor2.selections = [new vscode.Selection(np, np)];
+          }
+          return;
+        }
+        // If not 'g', fall through and treat current key normally.
+      }
 
       // Awaiting target for f/F/t/T
       if (findPending) {
@@ -550,6 +585,36 @@ export function activate(context: vscode.ExtensionContext) {
       if (key === 'f' || key === 'F' || key === 't' || key === 'T') {
         findPending = key as FindType;
         if (statusItem) statusItem.text = `KeyMotion: ${pending[0] ? pending[0] + ' ' : ''}${key} …`;
+        return;
+      }
+
+      // 'g' prefix (for gg)
+      if (key === 'g') {
+        gPending = true;
+        gCount = hadCount ? count : undefined; // remember potential count for gg
+        if (statusItem) statusItem.text = `KeyMotion: ${pending[0] ? pending[0] + ' ' : ''}g …`;
+        return;
+      }
+
+      // 'G' motion: go to last line or [count] line; as operator, linewise range to that line
+      if (key === 'G') {
+        const editor2 = vscode.window.activeTextEditor!;
+        const doc2 = editor2.document;
+        const cur = editor2.selections[0].active;
+        const targetLine = hadCount ? Math.min(doc2.lineCount - 1, count - 1) : (doc2.lineCount - 1);
+        if (pending.length > 0) {
+          const opKey = pending.shift()!;
+          const startLine = Math.min(cur.line, targetLine);
+          const endLine = Math.max(cur.line, targetLine);
+          const start = new vscode.Position(startLine, 0);
+          const end = doc2.lineAt(endLine).rangeIncludingLineBreak.end;
+          await performOpOnRange(editor2, opKey, new vscode.Range(start, end));
+          rangePrefix = undefined;
+          opCount = undefined;
+        } else {
+          const np = new vscode.Position(targetLine, 0);
+          editor2.selections = [new vscode.Selection(np, np)];
+        }
         return;
       }
 
