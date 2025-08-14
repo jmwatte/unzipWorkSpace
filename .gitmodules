@@ -1,0 +1,4 @@
+[submodule "keymotion-trainer"]
+	path = keymotion-trainer
+	url = https://github.com/jmwatte/keymotion-trainer.git
+	branch = main
