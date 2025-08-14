@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode-test/
+*.vsix
+
+# Node/TypeScript build artifacts
+keymotion-trainer/node_modules/
+keymotion-trainer/out/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage/Reports
+coverage/
+*.lcov
+
+# Misc
+*.tmp
+*.swp
