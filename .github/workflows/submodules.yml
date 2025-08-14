@@ -11,12 +11,12 @@ jobs:
   verify-submodules:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout (with submodules)
+  uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    submodules: recursive
+    token: ${{ secrets.SUBMODULES_TOKEN }}
 
       - name: Init submodules
         shell: bash
@@ -54,12 +54,12 @@ jobs:
     needs: verify-submodules
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout (with submodules)
+  uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    submodules: recursive
+    token: ${{ secrets.SUBMODULES_TOKEN }}
 
       - name: Init submodules
         shell: bash
