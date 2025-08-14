@@ -41,11 +41,17 @@ async function motion(editor: vscode.TextEditor, key: string) {
   const sel = editor.selections[0];
   const pos = sel.active;
   let newPos = pos;
+  const clampPos = (line: number, ch: number): vscode.Position => {
+    const clampedLine = Math.max(0, Math.min(doc.lineCount - 1, line));
+    const lineEnd = doc.lineAt(clampedLine).range.end.character;
+    const clampedCh = Math.max(0, Math.min(lineEnd, ch));
+    return new vscode.Position(clampedLine, clampedCh);
+  };
   switch (key) {
-  case 'h': newPos = pos.with(pos.line, Math.max(0, pos.character - 1)); break; // left
-  case 'l': newPos = pos.with(pos.line, pos.character + 1); break; // right
-  case 'j': newPos = pos.with(pos.line, Math.min(doc.lineCount - 1, pos.line + 1)); break; // down
-  case 'k': newPos = pos.with(pos.line, Math.max(0, pos.line - 1)); break; // up
+    case 'h': newPos = clampPos(pos.line, pos.character - 1); break; // left
+    case 'l': newPos = clampPos(pos.line, pos.character + 1); break; // right
+    case 'j': newPos = clampPos(pos.line + 1, pos.character); break; // down
+    case 'k': newPos = clampPos(pos.line - 1, pos.character); break; // up
     case 'w': {
       const text = doc.getText(new vscode.Range(pos, doc.lineAt(pos.line).range.end));
       const m = /\w+\W*/.exec(text);
