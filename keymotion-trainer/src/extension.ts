@@ -4,6 +4,7 @@ let training = false;
 let pending: string[] = [];
 let statusItem: vscode.StatusBarItem | undefined;
 let countBuffer: string = '';
+let insertMode = false;
 
 function setTraining(on: boolean) {
   training = on;
@@ -23,6 +24,9 @@ function setTraining(on: boolean) {
         .then((doc: vscode.TextDocument) => vscode.window.showTextDocument(doc, { preview: false }));
   } else {
     if (statusItem) { statusItem.text = 'KeyMotion: OFF'; statusItem.hide(); }
+    insertMode = false;
+    pending = [];
+    countBuffer = '';
   }
 }
 
@@ -115,10 +119,20 @@ async function applyOperatorRange(editor: vscode.TextEditor, rangeKey: string) {
   const r = rangeFor(rangeKey);
   if (!r) { return; }
 
-  if (op === 'd') { await editor.edit((b) => b.delete(r)); }
-  else if (op === 'y') { await vscode.env.clipboard.writeText(editor.document.getText(r)); editor.selections = [new vscode.Selection(r.start, r.start)]; }
-  else if (op === 'c') { await editor.edit((b) => b.delete(r)); }
-  if (statusItem) statusItem.text = 'KeyMotion: ON';
+  if (op === 'd') {
+    await editor.edit((b) => b.delete(r));
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+  }
+  else if (op === 'y') {
+    await vscode.env.clipboard.writeText(editor.document.getText(r));
+    editor.selections = [new vscode.Selection(r.start, r.start)];
+    if (statusItem) statusItem.text = 'KeyMotion: ON';
+  }
+  else if (op === 'c') {
+    await editor.edit((b) => b.delete(r));
+    insertMode = true;
+    if (statusItem) statusItem.text = 'INSERT';
+  }
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -128,11 +142,35 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('keymotion.toggleTraining', () => setTraining(!training)),
     vscode.commands.registerCommand('keymotion.calibrate', () => vscode.window.showInformationMessage('Calibration coming soon.')),
   vscode.commands.registerCommand('keymotion.type', async (arg: any) => {
-  if (!training) { return; }
+      if (!training) { return; }
       const key = normalizeKey(arg);
       const editor = vscode.window.activeTextEditor;
       if (!key || !editor) { return; }
-      if (key === 'Escape') { pending = []; countBuffer = ''; if (statusItem) { statusItem.text = 'KeyMotion: ON'; } return; }
+      if (key === 'Escape') {
+        if (insertMode) {
+          insertMode = false;
+        }
+        pending = [];
+        countBuffer = '';
+        if (statusItem) { statusItem.text = 'KeyMotion: ON'; }
+        return;
+      }
+
+      // INSERT mode: forward characters to the editor
+      if (insertMode) {
+        if (statusItem) statusItem.text = 'INSERT';
+        // Prefer arg.text when available (from 'type')
+        const text = (typeof arg === 'object' && typeof (arg as any).text === 'string') ? (arg as any).text : undefined;
+        if (typeof text === 'string' && text.length > 0) {
+          await vscode.commands.executeCommand('type', { text });
+          return;
+        }
+        // Handle a few control keys
+        if (key === 'Backspace') { await vscode.commands.executeCommand('deleteLeft'); return; }
+        if (key === 'Tab') { await vscode.commands.executeCommand('type', { text: '\t' }); return; }
+        if (key === 'Enter') { await vscode.commands.executeCommand('type', { text: '\n' }); return; }
+        return; // swallow anything else
+      }
   if (statusItem) { statusItem.text = `KeyMotion: ${countBuffer ? countBuffer + ' ' : ''}${pending[0] ? pending[0] + ' … ' : ''}${key}`; }
 
       // Counts
