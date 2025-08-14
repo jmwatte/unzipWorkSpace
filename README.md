@@ -48,6 +48,12 @@ Get-ChildItem -Path . -Recurse -Filter *.gz | Expand-GzipFiles
 Invoke-BatchUnzip -Files @('I:\A.tar.gz','I:\B.zip') -Verbose
 ```
 
+Install the module to your user Modules path and import by name:
+```powershell
+./Scripts/Install-LocalModule.ps1 -Force
+Import-Module UnzipWorkspace
+```
+
 ## Requirements
 
 - PowerShell 5.1+ or PowerShell 7+
