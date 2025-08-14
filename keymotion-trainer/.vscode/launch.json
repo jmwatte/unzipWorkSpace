@@ -5,9 +5,9 @@
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/keymotion-trainer"],
-      "outFiles": ["${workspaceFolder}/keymotion-trainer/out/**/*.js"],
-      "preLaunchTask": "npm: compile"
+  "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+  "outFiles": ["${workspaceFolder}/out/**/*.js"],
+  "preLaunchTask": "npm: compile"
     }
   ]
 }
